@@ -1,0 +1,873 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>System Design: A Visual Guide</title>
+<style>
+  :root {
+    --bg: #f7f7f5;
+    --card: #ffffff;
+    --ink: #1d1f23;
+    --muted: #5d636d;
+    --line: #d7dade;
+    --accent: #2f6fed;
+    --accent-2: #12a574;
+    --warn: #e0803a;
+    --violet: #7a5af8;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #15171b;
+      --card: #1e2127;
+      --ink: #e8eaed;
+      --muted: #9aa1ab;
+      --line: #343a44;
+      --accent: #6b9bff;
+      --accent-2: #3ccf9a;
+      --warn: #f0a062;
+      --violet: #a594ff;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #15171b;
+    --card: #1e2127;
+    --ink: #e8eaed;
+    --muted: #9aa1ab;
+    --line: #343a44;
+    --accent: #6b9bff;
+    --accent-2: #3ccf9a;
+    --warn: #f0a062;
+    --violet: #a594ff;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font: 16px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  main { max-width: 860px; margin: 0 auto; padding: 32px 18px 80px; }
+  header h1 { font-size: 2.1rem; margin: 0 0 6px; }
+  header p { color: var(--muted); margin: 0; }
+  .part { color: var(--muted); font-size: 0.85rem; text-transform: uppercase; letter-spacing: .08em; }
+  nav.toc {
+    background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+    padding: 16px 20px; margin: 24px 0 8px;
+  }
+  nav.toc h2 { font-size: 1rem; margin: 0 0 8px; }
+  nav.toc ol { margin: 0; padding-left: 20px; columns: 2; }
+  nav.toc a { color: var(--accent); text-decoration: none; }
+  nav.toc a:hover { text-decoration: underline; }
+  @media (max-width: 600px) { nav.toc ol { columns: 1; } }
+  .group { margin: 40px 0 0; font-size: 1.2rem; color: var(--muted); border-bottom: 1px solid var(--line); padding-bottom: 6px; }
+  section.topic {
+    background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+    padding: 22px 22px 18px; margin: 22px 0;
+  }
+  section.topic h2 { margin: 0 0 4px; font-size: 1.4rem; }
+  section.topic p { margin: 8px 0; }
+  section.topic ul { padding-left: 20px; margin: 8px 0; }
+  figure { margin: 14px 0 6px; }
+  figure svg { width: 100%; height: auto; display: block; overflow: visible; }
+  figcaption { color: var(--muted); font-size: 0.9rem; }
+
+  .cap-title { margin: 18px 0 8px; font-size: 1.05rem; }
+  .cap-row { display: flex; gap: 18px; align-items: flex-start; flex-wrap: wrap; }
+  .cap-row svg { width: 240px; flex: 0 0 240px; height: auto; }
+  .cap-text { flex: 1 1 320px; }
+  .cap-text ul { margin-top: 4px; }
+  .cap-text .pick { color: var(--accent-2); font-weight: 600; }
+  .cap-text .skip { color: var(--warn); font-weight: 600; }
+
+  /* SVG text and shapes use theme variables */
+  .t { fill: var(--ink); font: 13px system-ui, sans-serif; }
+  .tm { fill: var(--muted); font: 12px system-ui, sans-serif; }
+  .tb { fill: var(--ink); font: 600 13px system-ui, sans-serif; }
+  .box { fill: var(--card); stroke: var(--ink); stroke-width: 1.5; }
+  .box-a { fill: var(--accent); fill-opacity: .14; stroke: var(--accent); stroke-width: 1.5; }
+  .box-g { fill: var(--accent-2); fill-opacity: .16; stroke: var(--accent-2); stroke-width: 1.5; }
+  .box-w { fill: var(--warn); fill-opacity: .16; stroke: var(--warn); stroke-width: 1.5; }
+  .box-v { fill: var(--violet); fill-opacity: .16; stroke: var(--violet); stroke-width: 1.5; }
+  .ln { stroke: var(--muted); stroke-width: 1.8; fill: none; }
+  .ln-a { stroke: var(--accent); stroke-width: 2; fill: none; }
+  .ln-g { stroke: var(--accent-2); stroke-width: 2; fill: none; }
+  .ln-w { stroke: var(--warn); stroke-width: 2; fill: none; }
+  .ln-v { stroke: var(--violet); stroke-width: 2; fill: none; }
+  .flow { stroke-dasharray: 6 6; animation: dash 1.2s linear infinite; }
+  .blink { animation: blink 2.4s ease-in-out infinite; }
+  .blink2 { animation: blink 2.4s ease-in-out 1.2s infinite; }
+  .grow { transform-box: fill-box; transform-origin: center bottom; animation: grow 4s ease-in-out infinite; }
+  .fadein { animation: fadein 4s ease-in-out infinite; }
+  .fadein2 { animation: fadein 4s ease-in-out 2s infinite; }
+  .step1 { animation: step 6s infinite 0s; }
+  .step2 { animation: step 6s infinite 2s; }
+  .step3 { animation: step 6s infinite 4s; }
+
+  @keyframes dash { to { stroke-dashoffset: -24; } }
+  @keyframes blink { 0%, 100% { opacity: .25; } 50% { opacity: 1; } }
+  @keyframes fadein { 0% { opacity: 0; } 30% { opacity: 1; } 70% { opacity: 1; } 100% { opacity: 0; } }
+  @keyframes grow { 0%, 100% { transform: scaleY(.6); } 50% { transform: scaleY(1); } }
+  @keyframes step { 0% { opacity: 0; } 5%, 30% { opacity: 1; } 35%, 100% { opacity: .25; } }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; }
+    animateMotion { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Shared arrowhead definitions for every diagram -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <marker id="m-m" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" style="fill:var(--muted)"/></marker>
+    <marker id="m-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" style="fill:var(--accent)"/></marker>
+    <marker id="m-g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" style="fill:var(--accent-2)"/></marker>
+    <marker id="m-w" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" style="fill:var(--warn)"/></marker>
+    <marker id="m-v" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" style="fill:var(--violet)"/></marker>
+  </defs>
+</svg>
+
+<main>
+
+<header>
+  <div class="part">Visual guide</div>
+  <h1>System Design: Patterns, Examples and Techniques</h1>
+  <p>Each concept has a small animated diagram. Arrows show direction only where data or requests move. The text is my own summary of the topics in the original article.</p>
+</header>
+
+<nav class="toc">
+  <h2>Contents</h2>
+  <ol>
+    <li><a href="#what">What is system design?</a></li>
+    <li><a href="#scaling">Horizontal and vertical scaling</a></li>
+    <li><a href="#redundancy">Redundancy and replication</a></li>
+    <li><a href="#microservices">Microservices</a></li>
+    <li><a href="#cap">CAP theorem</a></li>
+    <li><a href="#proxy">Proxy servers</a></li>
+    <li><a href="#queues">Message queues</a></li>
+    <li><a href="#filesystems">File systems</a></li>
+    <li><a href="#2pc">Two-phase commit</a></li>
+    <li><a href="#rlbs">Replicated load-balanced services</a></li>
+    <li><a href="#cqrs">CQRS</a></li>
+    <li><a href="#saga">Saga</a></li>
+    <li><a href="#sharding">Sharded services</a></li>
+    <li><a href="#ecommerce">eCommerce system</a></li>
+    <li><a href="#cdn">Content delivery network</a></li>
+    <li><a href="#social">Social networking platform</a></li>
+    <li><a href="#iot">IoT system</a></li>
+    <li><a href="#dfd">Data flow diagrams</a></li>
+    <li><a href="#archdiagram">Architecture diagrams</a></li>
+    <li><a href="#datadict">Data dictionaries</a></li>
+    <li><a href="#dtree">Decision trees</a></li>
+    <li><a href="#dtable">Decision tables</a></li>
+    <li><a href="#pseudo">Pseudocode</a></li>
+    <li><a href="#uml">UML</a></li>
+    <li><a href="#apis">APIs and contracts</a></li>
+  </ol>
+</nav>
+
+<!-- ============ FOUNDATIONS ============ -->
+<h2 class="group">Foundations</h2>
+
+<section class="topic" id="what">
+  <h2>What is system design?</h2>
+  <p>System design means deciding how a system is built before it is built: its parts, the boundaries between them, how they talk to each other, and how it meets its requirements for speed, reliability and cost. The output is a blueprint that shows the flow of work through the system.</p>
+  <figure>
+    <svg viewBox="0 0 640 200" role="img" aria-label="Requirements turn into a blueprint of connected components">
+      <rect class="box-a" x="20" y="70" width="150" height="60" rx="10"/>
+      <text class="tb" x="95" y="96" text-anchor="middle">Requirements</text>
+      <text class="tm" x="95" y="114" text-anchor="middle">goals, limits, users</text>
+      <path class="ln-a flow" marker-end="url(#m-a)" d="M170 100 L250 100"/>
+      <rect class="box" x="250" y="30" width="140" height="50" rx="8"/>
+      <rect class="box" x="250" y="120" width="140" height="50" rx="8"/>
+      <rect class="box" x="460" y="75" width="150" height="50" rx="8"/>
+      <text class="t" x="320" y="60" text-anchor="middle">Web tier</text>
+      <text class="t" x="320" y="150" text-anchor="middle">Data tier</text>
+      <text class="t" x="535" y="105" text-anchor="middle">Users</text>
+      <path class="ln" d="M320 80 L320 120"/>
+      <path class="ln flow" marker-end="url(#m-m)" d="M390 55 L460 90"/>
+      <circle r="5" fill="var(--accent-2)"><animateMotion dur="2.6s" repeatCount="indefinite" path="M170 100 L250 100"/></circle>
+    </svg>
+    <figcaption>Requirements produce a blueprint of components and the paths between them.</figcaption>
+  </figure>
+</section>
+
+<!-- ============ CONCEPTS ============ -->
+<h2 class="group">System design concepts</h2>
+
+<section class="topic" id="scaling">
+  <h2>Horizontal and vertical scaling</h2>
+  <p><strong>Vertical scaling</strong> makes one machine stronger by adding CPU, memory or storage. It is simple, but a single machine has a ceiling and upgrades can mean downtime.</p>
+  <p><strong>Horizontal scaling</strong> adds more machines and spreads the load across them. It is the usual approach in cloud systems, and it is typically combined with load balancing or sharding.</p>
+  <figure>
+    <svg viewBox="0 0 640 220" role="img" aria-label="One server growing taller versus many servers being added">
+      <text class="tb" x="150" y="28" text-anchor="middle">Vertical</text>
+      <rect class="box-a grow" x="110" y="60" width="80" height="130" rx="6"/>
+      <text class="tm" x="150" y="210" text-anchor="middle">bigger machine</text>
+      <text class="tb" x="470" y="28" text-anchor="middle">Horizontal</text>
+      <rect class="box-g fadein" x="380" y="70" width="60" height="50" rx="5"/>
+      <rect class="box-g fadein2" x="450" y="70" width="60" height="50" rx="5"/>
+      <rect class="box-g fadein" x="380" y="130" width="60" height="50" rx="5"/>
+      <rect class="box-g fadein2" x="450" y="130" width="60" height="50" rx="5"/>
+      <text class="tm" x="470" y="210" text-anchor="middle">more machines</text>
+    </svg>
+    <figcaption>Vertical scaling grows one node. Horizontal scaling adds nodes.</figcaption>
+  </figure>
+</section>
+
+<section class="topic" id="redundancy">
+  <h2>Redundancy and replication</h2>
+  <p><strong>Redundancy</strong> means keeping a spare of an important component so the system survives a failure. <strong>Replication</strong> means keeping several synchronized copies of data on different nodes. Both support availability, fault tolerance and durability when hardware fails or the network splits.</p>
+  <figure>
+    <svg viewBox="0 0 640 200" role="img" aria-label="A primary node copies its data to two replicas">
+      <rect class="box-a" x="60" y="70" width="140" height="60" rx="8"/>
+      <text class="tb" x="130" y="106" text-anchor="middle">Primary</text>
+      <rect class="box" x="300" y="20" width="140" height="50" rx="8"/>
+      <text class="t" x="370" y="50" text-anchor="middle">Replica A</text>
+      <rect class="box" x="300" y="130" width="140" height="50" rx="8"/>
+      <text class="t" x="370" y="160" text-anchor="middle">Replica B</text>
+      <path class="ln-g flow" marker-end="url(#m-g)" d="M200 90 L300 45"/>
+      <path class="ln-g flow" marker-end="url(#m-g)" d="M200 110 L300 155"/>
+      <circle r="5" fill="var(--accent-2)"><animateMotion dur="2.6s" repeatCount="indefinite" path="M200 90 L300 45"/></circle>
+      <circle r="5" fill="var(--accent-2)"><animateMotion dur="2.6s" begin="1.3s" repeatCount="indefinite" path="M200 110 L300 155"/></circle>
+      <text class="tm" x="470" y="105">If the primary fails,</text>
+      <text class="tm" x="470" y="122">a replica takes over.</text>
+    </svg>
+    <figcaption>Data flows from the primary to its replicas so one failure does not lose it.</figcaption>
+  </figure>
+</section>
+
+<section class="topic" id="microservices">
+  <h2>Microservices architecture</h2>
+  <p>A microservices system splits one large application into small services. Each service owns one business capability, has its own data, and talks to others through APIs. Teams can build, deploy and scale each service on its own, at the cost of more operational work.</p>
+  <figure>
+    <svg viewBox="0 0 640 220" role="img" aria-label="A monolith splits into independent services">
+      <rect class="box" x="30" y="60" width="170" height="110" rx="10"/>
+      <text class="tb" x="115" y="88" text-anchor="middle">Monolith</text>
+      <text class="tm" x="115" y="110" text-anchor="middle">one codebase,</text>
+      <text class="tm" x="115" y="126" text-anchor="middle">one deploy</text>
+      <path class="ln-a flow" marker-end="url(#m-a)" d="M200 115 L285 115"/>
+      <rect class="box-a blink" x="290" y="20" width="110" height="52" rx="8"/>
+      <rect class="box-g blink2" x="290" y="84" width="110" height="52" rx="8"/>
+      <rect class="box-w blink" x="290" y="148" width="110" height="52" rx="8"/>
+      <text class="t" x="345" y="50" text-anchor="middle">Orders</text>
+      <text class="t" x="345" y="114" text-anchor="middle">Payments</text>
+      <text class="t" x="345" y="178" text-anchor="middle">Catalog</text>
+      <path class="ln" d="M400 46 L470 100"/>
+      <path class="ln" d="M400 110 L470 110"/>
+      <path class="ln" d="M400 174 L470 120"/>
+      <rect class="box-v" x="470" y="90" width="150" height="40" rx="8"/>
+      <text class="t" x="545" y="115" text-anchor="middle">API gateway</text>
+    </svg>
+    <figcaption>Each service is small, owns its data, and is deployed on its own.</figcaption>
+  </figure>
+</section>
+
+<section class="topic" id="cap">
+  <h2>CAP theorem</h2>
+  <p>Also called Brewer's theorem, CAP says a distributed system cannot guarantee all three of these at once during a network partition:</p>
+  <ul>
+    <li><strong>Consistency</strong>: every node returns the same, latest data.</li>
+    <li><strong>Availability</strong>: every request gets a response.</li>
+    <li><strong>Partition tolerance</strong>: the system keeps working when messages between nodes are lost.</li>
+  </ul>
+  <p>Since partitions happen in real networks, the practical choice is between consistency and availability when a partition occurs.</p>
+  <figure>
+    <svg viewBox="0 0 640 240" role="img" aria-label="Triangle showing consistency, availability and partition tolerance">
+      <polygon points="320,40 130,200 510,200" fill="none" stroke="var(--line)" stroke-width="2"/>
+      <circle class="blink" cx="320" cy="40" r="22" fill="var(--accent)" fill-opacity=".2" stroke="var(--accent)"/>
+      <circle class="blink2" cx="130" cy="200" r="22" fill="var(--accent-2)" fill-opacity=".2" stroke="var(--accent-2)"/>
+      <circle class="blink" cx="510" cy="200" r="22" fill="var(--warn)" fill-opacity=".2" stroke="var(--warn)"/>
+      <text class="tb" x="320" y="45" text-anchor="middle">C</text>
+      <text class="tb" x="130" y="205" text-anchor="middle">A</text>
+      <text class="tb" x="510" y="205" text-anchor="middle">P</text>
+      <text class="t" x="320" y="22" text-anchor="middle">Consistency</text>
+      <text class="t" x="70" y="234" text-anchor="middle">Availability</text>
+      <text class="t" x="570" y="234" text-anchor="middle">Partition tolerance</text>
+      <text class="tm" x="320" y="130" text-anchor="middle">pick two during a partition</text>
+    </svg>
+    <figcaption>During a network partition, you trade consistency against availability.</figcaption>
+  </figure>
+</section>
+
+<section class="topic" id="proxy">
+  <h2>Proxy servers</h2>
+  <p>A proxy sits between clients and servers and forwards requests. Because every request passes through it, it can balance load, cache responses, filter malicious traffic and hide the backend's details.</p>
+  <figure>
+    <svg viewBox="0 0 640 200" role="img" aria-label="Client request passes through a proxy to a backend server">
+      <rect class="box" x="20" y="70" width="120" height="60" rx="8"/>
+      <text class="t" x="80" y="106" text-anchor="middle">Client</text>
+      <rect class="box-w" x="250" y="70" width="140" height="60" rx="8"/>
+      <text class="tb" x="320" y="98" text-anchor="middle">Proxy</text>
+      <text class="tm" x="320" y="116" text-anchor="middle">cache · filter · route</text>
+      <rect class="box" x="480" y="70" width="140" height="60" rx="8"/>
+      <text class="t" x="550" y="106" text-anchor="middle">Backend</text>
+      <path class="ln-w flow" marker-end="url(#m-w)" d="M140 100 L250 100"/>
+      <path class="ln-w flow" marker-end="url(#m-w)" d="M390 100 L480 100"/>
+      <path class="ln flow" marker-end="url(#m-m)" d="M480 150 L390 150"/>
+      <path class="ln flow" marker-end="url(#m-m)" d="M250 150 L140 150"/>
+      <circle r="5" fill="var(--warn)"><animateMotion dur="2.6s" repeatCount="indefinite" path="M140 100 L250 100"/></circle>
+      <circle r="5" fill="var(--warn)"><animateMotion dur="2.6s" begin="1.3s" repeatCount="indefinite" path="M390 100 L480 100"/></circle>
+      <text class="tm" x="320" y="180" text-anchor="middle">responses travel back along the lower path</text>
+    </svg>
+    <figcaption>The proxy is the single entry point that forwards, caches or blocks.</figcaption>
+  </figure>
+</section>
+
+<section class="topic" id="queues">
+  <h2>Message queues</h2>
+  <p>A message queue lets one component send work to another without waiting for it. The producer writes messages into the queue, and the consumer reads them when it is ready. This decouples the two parts, smooths out spikes in load and helps the system survive a consumer that is temporarily down.</p>
+  <figure>
+    <svg viewBox="0 0 640 200" role="img" aria-label="Producer sends messages into a queue; consumer reads them at its own pace">
+      <rect class="box-a" x="20" y="70" width="120" height="60" rx="8"/>
+      <text class="t" x="80" y="106" text-anchor="middle">Producer</text>
+      <rect class="box" x="230" y="60" width="180" height="80" rx="6" stroke-dasharray="4 4"/>
+      <text class="tm" x="320" y="54" text-anchor="middle">queue</text>
+      <path class="ln-a flow" marker-end="url(#m-a)" d="M140 100 L230 100"/>
+      <path class="ln-v flow" marker-end="url(#m-v)" d="M410 100 L500 100"/>
+      <rect class="box-g" x="500" y="70" width="120" height="60" rx="8"/>
+      <text class="t" x="560" y="106" text-anchor="middle">Consumer</text>
+      <circle r="8" fill="var(--accent)"><animateMotion dur="2.6s" repeatCount="indefinite" path="M140 100 L230 100"/></circle>
+      <circle r="8" fill="var(--violet)"><animateMotion dur="2.6s" begin="1.3s" repeatCount="indefinite" path="M410 100 L500 100"/></circle>
+      <text class="tm" x="320" y="170" text-anchor="middle">producer does not wait for the consumer</text>
+    </svg>
+    <figcaption>Messages wait in the queue, so the two sides scale and fail independently.</figcaption>
+  </figure>
+</section>
+
+<section class="topic" id="filesystems">
+  <h2>File systems</h2>
+  <p>A file system organizes data on storage media into files and directories, enforces access rules and keeps the data intact. A <strong>local</strong> file system lives on one device. A <strong>distributed</strong> file system spreads files across many machines, which adds capacity and fault tolerance but makes consistency and performance harder.</p>
+  <figure>
+    <svg viewBox="0 0 640 200" role="img" aria-label="A folder tree on one device versus files spread across several machines">
+      <text class="tb" x="110" y="26" text-anchor="middle">Local</text>
+      <rect class="box-a" x="50" y="40" width="120" height="30" rx="6"/>
+      <text class="t" x="110" y="60" text-anchor="middle">/data</text>
+      <path class="ln" d="M70 70 L70 160 M70 100 L95 100 M70 130 L95 130 M70 160 L95 160"/>
+      <rect class="box" x="95" y="86" width="80" height="26" rx="4"/>
+      <rect class="box" x="95" y="116" width="80" height="26" rx="4"/>
+      <rect class="box" x="95" y="146" width="80" height="26" rx="4"/>
+      <text class="tb" x="470" y="26" text-anchor="middle">Distributed</text>
+      <rect class="box-g blink" x="380" y="50" width="70" height="40" rx="6"/>
+      <rect class="box-g blink2" x="470" y="50" width="70" height="40" rx="6"/>
+      <rect class="box-g blink" x="380" y="120" width="70" height="40" rx="6"/>
+      <rect class="box-g blink2" x="470" y="120" width="70" height="40" rx="6"/>
+      <path class="ln" d="M415 90 L415 120 M505 90 L505 120 M415 90 L505 120 M505 90 L415 120"/>
+    </svg>
+    <figcaption>A local file system uses one disk. A distributed one spreads files over many machines.</figcaption>
+  </figure>
+</section>
+
+<!-- ============ PATTERNS ============ -->
+<h2 class="group">Architecture and patterns</h2>
+
+<section class="topic" id="2pc">
+  <h2>Two-phase commit (2PC)</h2>
+  <p>2PC is a protocol that makes a transaction across several resources atomic: either every participant commits or none does. A coordinator runs two phases:</p>
+  <ul>
+    <li><strong>Prepare</strong>: each participant checks it can commit and votes yes or no.</li>
+    <li><strong>Commit</strong>: if all voted yes, the coordinator tells everyone to commit; otherwise everyone aborts.</li>
+  </ul>
+  <p>It is strongly consistent, but participants can block while waiting on the coordinator, which is why it is avoided in many large systems.</p>
+  <figure>
+    <svg viewBox="0 0 640 230" role="img" aria-label="Coordinator asks three participants to prepare, collects votes, then commits">
+      <rect class="box-v" x="250" y="10" width="140" height="44" rx="8"/>
+      <text class="t" x="320" y="37" text-anchor="middle">Coordinator</text>
+      <rect class="box" x="60" y="170" width="130" height="44" rx="8"/>
+      <rect class="box" x="255" y="170" width="130" height="44" rx="8"/>
+      <rect class="box" x="450" y="170" width="130" height="44" rx="8"/>
+      <text class="t" x="125" y="197" text-anchor="middle">Inventory</text>
+      <text class="t" x="320" y="197" text-anchor="middle">Payment</text>
+      <text class="t" x="515" y="197" text-anchor="middle">Shipping</text>
+      <path class="ln-v flow" marker-end="url(#m-v)" d="M300 54 L140 168"/>
+      <path class="ln-v flow" marker-end="url(#m-v)" d="M320 54 L320 168"/>
+      <path class="ln-v flow" marker-end="url(#m-v)" d="M340 54 L500 168"/>
+      <text class="tm" x="40" y="128">1. prepare</text>
+      <path class="ln-g flow" marker-end="url(#m-g)" d="M140 168 L290 60"/>
+      <path class="ln-g flow" marker-end="url(#m-g)" d="M320 168 L325 60"/>
+      <path class="ln-g flow" marker-end="url(#m-g)" d="M500 168 L350 60"/>
+      <text class="tm" x="520" y="128">2. votes</text>
+    </svg>
+    <figcaption>Prepare, vote, then commit or abort everywhere.</figcaption>
+  </figure>
+</section>
+
+<section class="topic" id="rlbs">
+  <h2>Replicated load-balanced services (RLBS)</h2>
+  <p>RLBS runs several identical copies of a service behind a load balancer. The balancer spreads requests across them, so no single copy gets overloaded, and if one copy fails the others keep serving.</p>
+  <figure>
+    <svg viewBox="0 0 640 220" role="img" aria-label="Load balancer distributes requests to three replicas">
+      <rect class="box-a" x="30" y="85" width="120" height="50" rx="8"/>
+      <text class="t" x="90" y="115" text-anchor="middle">Requests</text>
+      <rect class="box-w" x="220" y="85" width="130" height="50" rx="8"/>
+      <text class="tb" x="285" y="115" text-anchor="middle">Load balancer</text>
+      <rect class="box-g" x="440" y="25" width="150" height="45" rx="8"/>
+      <rect class="box-g" x="440" y="88" width="150" height="45" rx="8"/>
+      <rect class="box-g" x="440" y="151" width="150" height="45" rx="8"/>
+      <text class="t" x="515" y="52" text-anchor="middle">Replica 1</text>
+      <text class="t" x="515" y="115" text-anchor="middle">Replica 2</text>
+      <text class="t" x="515" y="178" text-anchor="middle">Replica 3</text>
+      <path class="ln-a flow" marker-end="url(#m-a)" d="M150 110 L220 110"/>
+      <path class="ln-g flow" marker-end="url(#m-g)" d="M350 110 L440 48"/>
+      <path class="ln-g flow" marker-end="url(#m-g)" d="M350 110 L440 110"/>
+      <path class="ln-g flow" marker-end="url(#m-g)" d="M350 110 L440 172"/>
+      <circle r="5" fill="var(--accent)"><animateMotion dur="2.6s" repeatCount="indefinite" path="M150 110 L220 110"/></circle>
+      <circle r="5" fill="var(--accent-2)"><animateMotion dur="2.6s" begin="1.3s" repeatCount="indefinite" path="M350 110 L440 48"/></circle>
+    </svg>
+    <figcaption>Replication gives you copies; the balancer spreads the work across them.</figcaption>
+  </figure>
+</section>
+
+<section class="topic" id="cqrs">
+  <h2>Command and Query Responsibility Segregation (CQRS)</h2>
+  <p>CQRS separates writes (commands that change state) from reads (queries that return data). Because the two sides are separate, each can use its own data model and store, and each can scale on its own. Reads are often served from a store shaped for display, which is updated from the write side.</p>
+  <figure>
+    <svg viewBox="0 0 640 220" role="img" aria-label="Commands go to a write model; queries go to a read model that is synced from it">
+      <rect class="box-a" x="20" y="20" width="130" height="44" rx="8"/>
+      <text class="t" x="85" y="47" text-anchor="middle">Commands (write)</text>
+      <rect class="box-w" x="20" y="150" width="130" height="44" rx="8"/>
+      <text class="t" x="85" y="177" text-anchor="middle">Queries (read)</text>
+      <rect class="box" x="230" y="20" width="150" height="44" rx="8"/>
+      <text class="t" x="305" y="47" text-anchor="middle">Write model</text>
+      <rect class="box" x="450" y="20" width="160" height="44" rx="8"/>
+      <text class="t" x="530" y="47" text-anchor="middle">Write store</text>
+      <rect class="box" x="450" y="150" width="160" height="44" rx="8"/>
+      <text class="t" x="530" y="177" text-anchor="middle">Read store (denormalized)</text>
+      <rect class="box" x="230" y="150" width="150" height="44" rx="8"/>
+      <text class="t" x="305" y="177" text-anchor="middle">Read model</text>
+      <path class="ln-a flow" marker-end="url(#m-a)" d="M150 42 L230 42"/>
+      <path class="ln-a flow" marker-end="url(#m-a)" d="M380 42 L450 42"/>
+      <path class="ln-w flow" marker-end="url(#m-w)" d="M150 172 L230 172"/>
+      <path class="ln-w flow" marker-end="url(#m-w)" d="M380 172 L450 172"/>
+      <path class="ln" d="M530 64 L530 150"/>
+      <text class="tm" x="545" y="112">sync</text>
+      <circle r="5" fill="var(--accent)"><animateMotion dur="2.6s" repeatCount="indefinite" path="M150 42 L230 42"/></circle>
+      <circle r="5" fill="var(--warn)"><animateMotion dur="2.6s" repeatCount="indefinite" path="M150 172 L230 172"/></circle>
+    </svg>
+    <figcaption>The write path and the read path are separate, and the read side is kept in sync.</figcaption>
+  </figure>
+</section>
+
+<section class="topic" id="saga">
+  <h2>Saga</h2>
+  <p>A saga handles a long-running business transaction across services without a global lock. It is a sequence of local transactions, and each one has a compensating action that undoes it. If a step fails, the compensations run in reverse order. The saga gives up strict isolation to keep services available and fast.</p>
+  <p>Example: placing an order touches three services, so each step has a matching undo.</p>
+  <ul>
+    <li><strong>Order service</strong> creates and reserves the order; compensation cancels it.</li>
+    <li><strong>Inventory service</strong> reserves stock; compensation releases it.</li>
+    <li><strong>Payment service</strong> charges the customer; compensation refunds.</li>
+  </ul>
+  <figure>
+    <svg viewBox="0 0 640 230" role="img" aria-label="Three forward steps succeed, then a failure triggers compensations in reverse">
+      <rect class="box-g step1" x="30" y="30" width="170" height="50" rx="8"/>
+      <rect class="box-g step2" x="235" y="30" width="170" height="50" rx="8"/>
+      <rect class="box-w blink" x="440" y="30" width="170" height="50" rx="8"/>
+      <text class="t" x="115" y="60" text-anchor="middle">1. Create order</text>
+      <text class="t" x="320" y="60" text-anchor="middle">2. Reserve stock</text>
+      <text class="t" x="525" y="60" text-anchor="middle">3. Charge card (fails)</text>
+      <path class="ln-g flow" marker-end="url(#m-g)" d="M200 55 L235 55"/>
+      <path class="ln-g flow" marker-end="url(#m-g)" d="M405 55 L440 55"/>
+      <rect class="box-v" x="30" y="125" width="170" height="50" rx="8"/>
+      <rect class="box-v" x="235" y="125" width="170" height="50" rx="8"/>
+      <text class="t" x="115" y="155" text-anchor="middle">Cancel order</text>
+      <text class="t" x="320" y="155" text-anchor="middle">Release stock</text>
+      <path class="ln-w flow" marker-end="url(#m-w)" d="M440 110 L405 140"/>
+      <path class="ln-v flow" marker-end="url(#m-v)" d="M320 125 L200 150"/>
+      <text class="tm" x="320" y="200" text-anchor="middle">compensations run in reverse order</text>
+    </svg>
+    <figcaption>When a step fails, the completed steps are undone in reverse.</figcaption>
+  </figure>
+</section>
+
+<section class="topic" id="sharding">
+  <h2>Sharded services</h2>
+  <p>Sharding splits data across several instances by a key, such as a user ID. Each shard holds a slice of the data and handles its share of traffic, so capacity grows by adding shards. The trade-offs are harder queries across shards, rebalancing when shards are added, and more complicated consistency.</p>
+  <figure>
+    <svg viewBox="0 0 640 210" role="img" aria-label="Records are routed by a hash of their key to one of three shards">
+      <rect class="box-a" x="30" y="85" width="130" height="44" rx="8"/>
+      <text class="t" x="95" y="112" text-anchor="middle">Incoming key</text>
+      <rect class="box-w" x="220" y="85" width="130" height="44" rx="8"/>
+      <text class="t" x="285" y="112" text-anchor="middle">hash(key) mod 3</text>
+      <rect class="box" x="430" y="20" width="180" height="44" rx="8"/>
+      <rect class="box" x="430" y="85" width="180" height="44" rx="8"/>
+      <rect class="box" x="430" y="150" width="180" height="44" rx="8"/>
+      <text class="t" x="520" y="47" text-anchor="middle">Shard 0 (users A–H)</text>
+      <text class="t" x="520" y="112" text-anchor="middle">Shard 1 (users I–P)</text>
+      <text class="t" x="520" y="177" text-anchor="middle">Shard 2 (users Q–Z)</text>
+      <path class="ln-a flow" marker-end="url(#m-a)" d="M160 107 L220 107"/>
+      <path class="ln-w flow" marker-end="url(#m-w)" d="M350 107 L430 42"/>
+      <path class="ln-w flow" marker-end="url(#m-w)" d="M350 107 L430 107"/>
+      <path class="ln-w flow" marker-end="url(#m-w)" d="M350 107 L430 172"/>
+      <circle r="6" fill="var(--warn)"><animateMotion dur="2.6s" repeatCount="indefinite" path="M160 107 L220 107"/></circle>
+      <circle r="6" fill="var(--warn)"><animateMotion dur="2.6s" begin="1.3s" repeatCount="indefinite" path="M350 107 L430 107"/></circle>
+    </svg>
+    <figcaption>A key decides which shard holds the record.</figcaption>
+  </figure>
+</section>
+
+<!-- ============ EXAMPLES ============ -->
+<h2 class="group">System design examples</h2>
+
+<section class="topic" id="ecommerce">
+  <h2>eCommerce system</h2>
+  <p>An online store needs a browsing front end, a cart, payments, order management and a warehouse system. These parts must exchange data reliably while handling traffic spikes, protecting customer data and staying available.</p>
+  <figure>
+    <svg viewBox="0 0 640 260" role="img" aria-label="eCommerce components connected to the web app">
+      <rect class="box-a" x="240" y="100" width="160" height="50" rx="8"/>
+      <text class="tb" x="320" y="130" text-anchor="middle">Web app</text>
+      <rect class="box" x="20" y="20" width="150" height="40" rx="8"/><text class="t" x="95" y="45" text-anchor="middle">Catalog</text>
+      <rect class="box" x="20" y="200" width="150" height="40" rx="8"/><text class="t" x="95" y="225" text-anchor="middle">Cart</text>
+      <rect class="box-w" x="470" y="20" width="150" height="40" rx="8"/><text class="t" x="545" y="45" text-anchor="middle">Payments</text>
+      <rect class="box-w" x="470" y="200" width="150" height="40" rx="8"/><text class="t" x="545" y="225" text-anchor="middle">Orders</text>
+      <rect class="box-g" x="240" y="200" width="160" height="40" rx="8"/><text class="t" x="320" y="225" text-anchor="middle">Warehouse</text>
+      <path class="ln-a flow" marker-end="url(#m-a)" d="M170 40 L240 110"/>
+      <path class="ln-a flow" marker-end="url(#m-a)" d="M170 220 L240 150"/>
+      <path class="ln-w flow" marker-end="url(#m-w)" d="M400 110 L470 40"/>
+      <path class="ln-w flow" marker-end="url(#m-w)" d="M400 150 L470 220"/>
+      <path class="ln-g flow" marker-end="url(#m-g)" d="M320 150 L320 200"/>
+      <circle r="5" fill="var(--accent)"><animateMotion dur="2.6s" repeatCount="indefinite" path="M170 40 L240 110"/></circle>
+      <circle r="5" fill="var(--warn)"><animateMotion dur="2.6s" begin="1.3s" repeatCount="indefinite" path="M400 150 L470 220"/></circle>
+    </svg>
+    <figcaption>Browsing, cart, payment, orders and fulfillment connect through the web app.</figcaption>
+  </figure>
+  <h3 class="cap-title">CAP view</h3>
+  <div class="cap-row">
+    <svg viewBox="0 0 300 255" role="img" aria-label="CAP triangle: consistency and availability highlighted, partition tolerance faded">
+      <polygon points="150,50 30,210 270,210" fill="none" stroke="var(--line)" stroke-width="2"/>
+      <circle class="blink" cx="150" cy="50" r="20" fill="var(--accent)" fill-opacity=".25" stroke="var(--accent)" stroke-width="2"/>
+      <circle class="blink2" cx="30" cy="210" r="20" fill="var(--accent)" fill-opacity=".25" stroke="var(--accent)" stroke-width="2"/>
+      <circle cx="270" cy="210" r="20" fill="none" stroke="var(--line)" stroke-dasharray="4 4"/>
+      <text class="tb" x="150" y="56" text-anchor="middle">C</text>
+      <text class="tb" x="30" y="216" text-anchor="middle">A</text>
+      <text class="tm" x="270" y="216" text-anchor="middle">P</text>
+      <text class="t" x="150" y="22" text-anchor="middle">Consistency</text>
+      <text class="t" x="0" y="250">Availability</text>
+      <text class="tm" x="300" y="250" text-anchor="end">Partition tolerance</text>
+    </svg>
+    <div class="cap-text">
+      <p><span class="pick">Prioritized: consistency and availability.</span></p>
+      <ul>
+        <li><strong>Consistency</strong> for inventory, payments and orders. Two shoppers must not buy the last unit, and a payment must not be recorded twice. Checkout can refuse to proceed if it cannot confirm stock.</li>
+        <li><strong>Availability</strong> for browsing and the cart. A store that will not load during a sale loses revenue, and a product page a few seconds old causes no harm.</li>
+      </ul>
+      <p><span class="skip">Deprioritized: partition tolerance as a choice.</span> A store runs across many services and networks, so partitions will happen. You plan for them rather than choose them. For example, checkout pauses and retries when the warehouse is unreachable.</p>
+    </div>
+  </div>
+</section>
+
+<section class="topic" id="cdn">
+  <h2>Content delivery network (CDN)</h2>
+  <p>A CDN keeps copies of content such as images, video and pages on servers near users. A request is served from the nearest edge, which lowers latency and takes load off the origin. The design must handle cache freshness, routing to the best edge, failover and secure delivery.</p>
+  <figure>
+    <svg viewBox="0 0 640 230" role="img" aria-label="Edge servers around the world serve cached copies from an origin">
+      <circle cx="320" cy="115" r="85" fill="none" stroke="var(--line)" stroke-dasharray="3 5"/>
+      <rect class="box-v" x="285" y="95" width="70" height="40" rx="6"/>
+      <text class="t" x="320" y="120" text-anchor="middle">Origin</text>
+      <rect class="box-g blink" x="110" y="40" width="70" height="36" rx="6"/>
+      <rect class="box-g blink2" x="460" y="40" width="70" height="36" rx="6"/>
+      <rect class="box-g blink" x="110" y="160" width="70" height="36" rx="6"/>
+      <rect class="box-g blink2" x="460" y="160" width="70" height="36" rx="6"/>
+      <text class="tm" x="145" y="62" text-anchor="middle">Edge</text>
+      <text class="tm" x="495" y="62" text-anchor="middle">Edge</text>
+      <text class="tm" x="145" y="182" text-anchor="middle">Edge</text>
+      <text class="tm" x="495" y="182" text-anchor="middle">Edge</text>
+      <path class="ln-v flow" marker-end="url(#m-v)" d="M285 105 L182 58"/>
+      <path class="ln-v flow" marker-end="url(#m-v)" d="M355 105 L458 58"/>
+      <path class="ln-v flow" marker-end="url(#m-v)" d="M285 125 L182 176"/>
+      <path class="ln-v flow" marker-end="url(#m-v)" d="M355 125 L458 176"/>
+      <path class="ln-g flow" marker-end="url(#m-g)" d="M65 110 L110 110"/>
+      <path class="ln-g flow" marker-end="url(#m-g)" d="M575 110 L530 110"/>
+      <rect class="box-a" x="20" y="100" width="90" height="30" rx="6"/>
+      <text class="tm" x="65" y="120" text-anchor="middle">User A</text>
+      <rect class="box-a" x="530" y="100" width="90" height="30" rx="6"/>
+      <text class="tm" x="575" y="120" text-anchor="middle">User B</text>
+      <circle r="5" fill="var(--violet)"><animateMotion dur="2.6s" repeatCount="indefinite" path="M285 105 L182 58"/></circle>
+      <circle r="5" fill="var(--accent-2)"><animateMotion dur="2.6s" begin="1.3s" repeatCount="indefinite" path="M65 110 L110 110"/></circle>
+    </svg>
+    <figcaption>Users are served by the nearest edge, which is only refilled from the origin when needed.</figcaption>
+  </figure>
+  <h3 class="cap-title">CAP view</h3>
+  <div class="cap-row">
+    <svg viewBox="0 0 300 255" role="img" aria-label="CAP triangle: availability and partition tolerance highlighted, consistency faded">
+      <polygon points="150,50 30,210 270,210" fill="none" stroke="var(--line)" stroke-width="2"/>
+      <circle cx="150" cy="50" r="20" fill="none" stroke="var(--line)" stroke-dasharray="4 4"/>
+      <circle class="blink" cx="30" cy="210" r="20" fill="var(--accent)" fill-opacity=".25" stroke="var(--accent)" stroke-width="2"/>
+      <circle class="blink2" cx="270" cy="210" r="20" fill="var(--accent)" fill-opacity=".25" stroke="var(--accent)" stroke-width="2"/>
+      <text class="tm" x="150" y="56" text-anchor="middle">C</text>
+      <text class="tb" x="30" y="216" text-anchor="middle">A</text>
+      <text class="tb" x="270" y="216" text-anchor="middle">P</text>
+      <text class="t" x="150" y="22" text-anchor="middle">Consistency</text>
+      <text class="t" x="0" y="250">Availability</text>
+      <text class="t" x="300" y="250" text-anchor="end">Partition tolerance</text>
+    </svg>
+    <div class="cap-text">
+      <p><span class="pick">Prioritized: availability and partition tolerance.</span></p>
+      <ul>
+        <li><strong>Availability</strong>: a user must get a file from the nearest edge. A page that fails to load is worse than one that is slightly out of date.</li>
+        <li><strong>Partition tolerance</strong>: edges are spread around the world and will sometimes lose contact with the origin. They keep serving cached copies instead of going dark.</li>
+      </ul>
+      <p><span class="skip">Deprioritized: consistency.</span> A cached copy can lag the origin for as long as its time-to-live. That is fine for images and video. For content that must change immediately, use a purge request or a shorter time-to-live.</p>
+    </div>
+  </div>
+</section>
+
+<section class="topic" id="social">
+  <h2>Social networking platform</h2>
+  <p>A social platform is a set of subsystems: sign-in, profiles, messaging, the news feed, media storage and search. The feed has to be assembled quickly from many users' activity, and the whole system has to handle huge read and write volumes as the user base grows.</p>
+  <figure>
+    <svg viewBox="0 0 640 240" role="img" aria-label="Feed service pulls from profiles, posts, media and search">
+      <rect class="box-a" x="250" y="95" width="140" height="50" rx="10"/>
+      <text class="tb" x="320" y="125" text-anchor="middle">News feed</text>
+      <rect class="box" x="20" y="20" width="130" height="40" rx="8"/><text class="t" x="85" y="45" text-anchor="middle">Auth</text>
+      <rect class="box" x="20" y="100" width="130" height="40" rx="8"/><text class="t" x="85" y="125" text-anchor="middle">Profiles</text>
+      <rect class="box" x="20" y="180" width="130" height="40" rx="8"/><text class="t" x="85" y="205" text-anchor="middle">Messaging</text>
+      <rect class="box-g" x="480" y="20" width="140" height="40" rx="8"/><text class="t" x="550" y="45" text-anchor="middle">Posts</text>
+      <rect class="box-g" x="480" y="100" width="140" height="40" rx="8"/><text class="t" x="550" y="125" text-anchor="middle">Media storage</text>
+      <rect class="box-g" x="480" y="180" width="140" height="40" rx="8"/><text class="t" x="550" y="205" text-anchor="middle">Search</text>
+      <path class="ln-a flow" marker-end="url(#m-a)" d="M150 40 L250 110"/>
+      <path class="ln-a flow" marker-end="url(#m-a)" d="M150 120 L250 120"/>
+      <path class="ln-a flow" marker-end="url(#m-a)" d="M150 200 L250 130"/>
+      <path class="ln-g flow" marker-end="url(#m-g)" d="M390 115 L480 40"/>
+      <path class="ln-g flow" marker-end="url(#m-g)" d="M390 120 L480 120"/>
+      <path class="ln-g flow" marker-end="url(#m-g)" d="M390 125 L480 200"/>
+      <circle r="5" fill="var(--accent)"><animateMotion dur="2.6s" repeatCount="indefinite" path="M150 120 L250 120"/></circle>
+      <circle r="5" fill="var(--accent-2)"><animateMotion dur="2.6s" begin="1.3s" repeatCount="indefinite" path="M390 120 L480 120"/></circle>
+    </svg>
+    <figcaption>The feed service gathers data from several subsystems on each request.</figcaption>
+  </figure>
+  <h3 class="cap-title">CAP view</h3>
+  <div class="cap-row">
+    <svg viewBox="0 0 300 255" role="img" aria-label="CAP triangle: availability and partition tolerance highlighted, consistency faded">
+      <polygon points="150,50 30,210 270,210" fill="none" stroke="var(--line)" stroke-width="2"/>
+      <circle cx="150" cy="50" r="20" fill="none" stroke="var(--line)" stroke-dasharray="4 4"/>
+      <circle class="blink" cx="30" cy="210" r="20" fill="var(--accent)" fill-opacity=".25" stroke="var(--accent)" stroke-width="2"/>
+      <circle class="blink2" cx="270" cy="210" r="20" fill="var(--accent)" fill-opacity=".25" stroke="var(--accent)" stroke-width="2"/>
+      <text class="tm" x="150" y="56" text-anchor="middle">C</text>
+      <text class="tb" x="30" y="216" text-anchor="middle">A</text>
+      <text class="tb" x="270" y="216" text-anchor="middle">P</text>
+      <text class="t" x="150" y="22" text-anchor="middle">Consistency</text>
+      <text class="t" x="0" y="250">Availability</text>
+      <text class="t" x="300" y="250" text-anchor="end">Partition tolerance</text>
+    </svg>
+    <div class="cap-text">
+      <p><span class="pick">Prioritized: availability and partition tolerance.</span></p>
+      <ul>
+        <li><strong>Availability</strong>: the feed and profiles must load for everyone, even during a regional outage.</li>
+        <li><strong>Partition tolerance</strong>: data lives in several regions, so parts of the network will sometimes be cut off from each other. Users should keep getting a feed, even if some of it is stale.</li>
+      </ul>
+      <p><span class="skip">Deprioritized: strict consistency.</span> Like counts, follower counts and feed ordering can converge over a few seconds, and nobody is harmed by that. Privacy settings and blocks are the exception: they must take effect quickly and reliably, so route them through a stronger path.</p>
+    </div>
+  </div>
+</section>
+
+<section class="topic" id="iot">
+  <h2>Internet of Things (IoT) system</h2>
+  <p>An IoT system has many small devices, such as sensors and actuators, that send readings through gateways to a cloud back end. The design must cover device onboarding and management, secure communication, processing large streams of data, and scaling to very large device counts.</p>
+  <figure>
+    <svg viewBox="0 0 640 220" role="img" aria-label="Sensors send readings through a gateway to the cloud">
+      <circle class="blink" cx="60" cy="50" r="18" fill="var(--accent)" fill-opacity=".14" stroke="var(--accent)" stroke-width="1.5"/>
+      <circle class="blink2" cx="60" cy="110" r="18" fill="var(--accent)" fill-opacity=".14" stroke="var(--accent)" stroke-width="1.5"/>
+      <circle class="blink" cx="60" cy="170" r="18" fill="var(--accent)" fill-opacity=".14" stroke="var(--accent)" stroke-width="1.5"/>
+      <text class="tm" x="60" y="205" text-anchor="middle">devices</text>
+      <rect class="box-w" x="230" y="85" width="120" height="50" rx="8"/>
+      <text class="tb" x="290" y="115" text-anchor="middle">Gateway</text>
+      <rect class="box-v" x="450" y="85" width="150" height="50" rx="8"/>
+      <text class="tb" x="525" y="115" text-anchor="middle">Cloud</text>
+      <path class="ln-a flow" marker-end="url(#m-a)" d="M82 50 L230 105"/>
+      <path class="ln-a flow" marker-end="url(#m-a)" d="M82 110 L230 110"/>
+      <path class="ln-a flow" marker-end="url(#m-a)" d="M82 170 L230 115"/>
+      <path class="ln-w flow" marker-end="url(#m-w)" d="M350 110 L450 110"/>
+      <circle r="5" fill="var(--accent)"><animateMotion dur="2.6s" repeatCount="indefinite" path="M82 110 L230 110"/></circle>
+      <circle r="5" fill="var(--warn)"><animateMotion dur="2.6s" begin="1.3s" repeatCount="indefinite" path="M350 110 L450 110"/></circle>
+    </svg>
+    <figcaption>Devices feed a gateway, and the gateway forwards to the cloud.</figcaption>
+  </figure>
+  <h3 class="cap-title">CAP view</h3>
+  <div class="cap-row">
+    <svg viewBox="0 0 300 255" role="img" aria-label="CAP triangle: partition tolerance and availability highlighted, consistency faded">
+      <polygon points="150,50 30,210 270,210" fill="none" stroke="var(--line)" stroke-width="2"/>
+      <circle cx="150" cy="50" r="20" fill="none" stroke="var(--line)" stroke-dasharray="4 4"/>
+      <circle class="blink" cx="30" cy="210" r="20" fill="var(--accent)" fill-opacity=".25" stroke="var(--accent)" stroke-width="2"/>
+      <circle class="blink2" cx="270" cy="210" r="20" fill="var(--accent)" fill-opacity=".25" stroke="var(--accent)" stroke-width="2"/>
+      <text class="tm" x="150" y="56" text-anchor="middle">C</text>
+      <text class="tb" x="30" y="216" text-anchor="middle">A</text>
+      <text class="tb" x="270" y="216" text-anchor="middle">P</text>
+      <text class="t" x="150" y="22" text-anchor="middle">Consistency</text>
+      <text class="t" x="0" y="250">Availability</text>
+      <text class="t" x="300" y="250" text-anchor="end">Partition tolerance</text>
+    </svg>
+    <div class="cap-text">
+      <p><span class="pick">Prioritized: partition tolerance and availability.</span></p>
+      <ul>
+        <li><strong>Partition tolerance</strong> is the normal case here, not a rare failure. Devices lose signal, run out of battery or sit behind unreliable links, so the design must expect disconnection.</li>
+        <li><strong>Availability</strong>: the gateway accepts and buffers readings when the cloud cannot be reached, so data is not dropped.</li>
+      </ul>
+      <p><span class="skip">Deprioritized: consistency.</span> Sensor readings are a stream. A late, duplicated or slightly out-of-order reading can be sorted out by timestamp later. Commands such as shutting off a valve or pushing firmware need stronger guarantees, so handle them on a separate path.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ TOOLS AND TECHNIQUES ============ -->
+<h2 class="group">Tools and techniques</h2>
+
+<section class="topic" id="dfd">
+  <h2>Data flow diagrams (DFD)</h2>
+  <p>A DFD shows how data moves: processes transform it, external entities send and receive it, and data stores hold it. Drawing one makes bottlenecks and unclear responsibilities easy to see during analysis and design.</p>
+  <figure>
+    <svg viewBox="0 0 640 210" role="img" aria-label="Customer sends order to process, which writes to a store and sends a receipt">
+      <rect class="box-a" x="20" y="80" width="120" height="50" rx="4"/>
+      <text class="t" x="80" y="110" text-anchor="middle">Customer</text>
+      <circle class="box-g" cx="300" cy="105" r="48"/>
+      <text class="t" x="300" y="110" text-anchor="middle">Process</text>
+      <text class="t" x="300" y="124" text-anchor="middle">order</text>
+      <rect class="box-w" x="500" y="60" width="120" height="30"/>
+      <text class="t" x="560" y="80" text-anchor="middle">Orders store</text>
+      <rect class="box-w" x="500" y="120" width="120" height="30"/>
+      <text class="t" x="560" y="140" text-anchor="middle">Receipts store</text>
+      <path class="ln flow" marker-end="url(#m-m)" d="M140 105 L252 105"/>
+      <path class="ln-w flow" marker-end="url(#m-w)" d="M348 95 L500 75"/>
+      <path class="ln-a flow" marker-end="url(#m-a)" d="M348 115 L420 115 L420 135 L500 135"/>
+      <circle r="5" fill="var(--accent)"><animateMotion dur="2.6s" repeatCount="indefinite" path="M140 105 L252 105"/></circle>
+      <circle r="5" fill="var(--accent-2)"><animateMotion dur="2.6s" begin="1.3s" repeatCount="indefinite" path="M348 115 L420 115 L420 135 L500 135"/></circle>
+      <text class="tm" x="320" y="190" text-anchor="middle">circles are processes, boxes are external parties or stores</text>
+    </svg>
+    <figcaption>Data moves from entity to process to store.</figcaption>
+  </figure>
+</section>
+
+<section class="topic" id="archdiagram">
+  <h2>Architecture diagrams</h2>
+  <p>Architecture diagrams show the structure of a system and how its parts depend on one another. They help stakeholders and engineers agree on the design and spot issues early. Keeping them current with the code is the hard part.</p>
+  <figure>
+    <svg viewBox="0 0 640 230" role="img" aria-label="Layered architecture: clients, API, services, data">
+      <rect class="box" x="60" y="10" width="520" height="40" rx="8"/><text class="t" x="320" y="35" text-anchor="middle">Clients (web, mobile)</text>
+      <rect class="box-a" x="60" y="70" width="520" height="40" rx="8"/><text class="t" x="320" y="95" text-anchor="middle">API gateway</text>
+      <rect class="box-g" x="60" y="130" width="250" height="40" rx="8"/><text class="t" x="185" y="155" text-anchor="middle">Services</text>
+      <rect class="box-w" x="330" y="130" width="250" height="40" rx="8"/><text class="t" x="455" y="155" text-anchor="middle">Background jobs</text>
+      <rect class="box-v" x="60" y="190" width="520" height="30" rx="8"/><text class="t" x="320" y="210" text-anchor="middle">Databases and caches</text>
+    </svg>
+    <figcaption>Each layer depends only on the layer below it.</figcaption>
+  </figure>
+</section>
+
+<section class="topic" id="datadict">
+  <h2>Data dictionaries</h2>
+  <p>A data dictionary documents every data element: its name, type, length, default, meaning and relationships. It keeps the team's definitions consistent and is the reference for the data model and the storage design.</p>
+  <figure>
+    <svg viewBox="0 0 640 190" role="img" aria-label="A data dictionary table with fields highlighted in turn">
+      <rect class="box-a" x="20" y="14" width="600" height="30" rx="4"/>
+      <text class="tb" x="40" y="34">Field</text><text class="tb" x="200" y="34">Type</text><text class="tb" x="300" y="34">Constraint</text><text class="tb" x="460" y="34">Meaning</text>
+      <rect class="box-g step1" x="20" y="50" width="600" height="30"/>
+      <text class="t" x="40" y="70">user_id</text><text class="t" x="200" y="70">UUID</text><text class="t" x="300" y="70">primary key</text><text class="t" x="460" y="70">account owner</text>
+      <rect class="box-g step2" x="20" y="86" width="600" height="30"/>
+      <text class="t" x="40" y="106">email</text><text class="t" x="200" y="106">varchar(254)</text><text class="t" x="300" y="106">unique, not null</text><text class="t" x="460" y="106">login address</text>
+      <rect class="box-g step3" x="20" y="122" width="600" height="30"/>
+      <text class="t" x="40" y="142">created_at</text><text class="t" x="200" y="142">timestamp</text><text class="t" x="300" y="142">default now()</text><text class="t" x="460" y="142">signup time</text>
+    </svg>
+    <figcaption>Each row documents one element, its type and rules.</figcaption>
+  </figure>
+</section>
+
+<section class="topic" id="dtree">
+  <h2>Decision trees</h2>
+  <p>A decision tree shows a choice as branches: each node asks a question, each branch is an answer, and each leaf is an outcome. Trees are good for working through complicated logic and explaining it to others.</p>
+  <figure>
+    <svg viewBox="0 0 640 240" role="img" aria-label="Decision tree choosing between cache and database based on read frequency">
+      <rect class="box-a" x="240" y="16" width="160" height="40" rx="8"/><text class="t" x="320" y="41" text-anchor="middle">Read-heavy?</text>
+      <path class="ln-a blink" marker-end="url(#m-a)" d="M280 56 L165 108"/>
+      <path class="ln blink2" marker-end="url(#m-m)" d="M360 56 L475 108"/>
+      <rect class="box-w" x="80" y="110" width="160" height="40" rx="8"/><text class="t" x="160" y="135" text-anchor="middle">Data changes often?</text>
+      <rect class="box-g blink2" x="400" y="110" width="160" height="40" rx="8"/><text class="t" x="480" y="135" text-anchor="middle">Use a database</text>
+      <path class="ln blink" marker-end="url(#m-m)" d="M120 150 L65 198"/>
+      <path class="ln blink" marker-end="url(#m-m)" d="M200 150 L255 198"/>
+      <rect class="box-g blink" x="20" y="200" width="100" height="30" rx="6"/><text class="t" x="70" y="220" text-anchor="middle">Short TTL</text>
+      <rect class="box-g blink2" x="210" y="200" width="100" height="30" rx="6"/><text class="t" x="260" y="220" text-anchor="middle">Long TTL</text>
+    </svg>
+    <figcaption>Each question narrows the choice until a leaf is reached.</figcaption>
+  </figure>
+</section>
+
+<section class="topic" id="dtable">
+  <h2>Decision tables</h2>
+  <p>A decision table lays out conditions and the actions they lead to, one rule per row. It makes it easy to check that every combination is covered, and that no two rules contradict each other.</p>
+  <figure>
+    <svg viewBox="0 0 640 190" role="img" aria-label="Decision table for approving a refund with rows highlighted">
+      <rect class="box-a" x="20" y="14" width="600" height="30" rx="4"/>
+      <text class="tb" x="40" y="34">Within 30 days?</text><text class="tb" x="230" y="34">Item damaged?</text><text class="tb" x="420" y="34">Result</text>
+      <rect class="box-g step1" x="20" y="50" width="600" height="30"/>
+      <text class="t" x="40" y="70">Yes</text><text class="t" x="230" y="70">Yes</text><text class="t" x="420" y="70">Full refund</text>
+      <rect class="box-w step2" x="20" y="86" width="600" height="30"/>
+      <text class="t" x="40" y="106">Yes</text><text class="t" x="230" y="106">No</text><text class="t" x="420" y="106">Store credit</text>
+      <rect class="box-v step3" x="20" y="122" width="600" height="30"/>
+      <text class="t" x="40" y="142">No</text><text class="t" x="230" y="142">Yes</text><text class="t" x="420" y="142">Manual review</text>
+    </svg>
+    <figcaption>Each row is one rule. Every combination of conditions maps to exactly one result.</figcaption>
+  </figure>
+</section>
+
+<section class="topic" id="pseudo">
+  <h2>Pseudocode</h2>
+  <p>Pseudocode describes an algorithm in plain structure without tying it to a language's syntax. It is used to discuss logic with the team and as a starting point for real code.</p>
+  <figure>
+    <svg viewBox="0 0 640 180" role="img" aria-label="Pseudocode for a retry loop with lines appearing in order">
+      <rect class="box" x="20" y="10" width="600" height="160" rx="8"/>
+      <text class="t fadein" x="40" y="40" style="font-family:monospace">for attempt in 1..3:</text>
+      <text class="t fadein" x="60" y="66" style="font-family:monospace">response = call(service)</text>
+      <text class="t fadein" x="60" y="92" style="font-family:monospace">if response.ok: return response</text>
+      <text class="t fadein" x="60" y="118" style="font-family:monospace">wait(2 ^ attempt seconds)</text>
+      <text class="t fadein" x="40" y="144" style="font-family:monospace">raise Unavailable</text>
+    </svg>
+    <figcaption>Logic in plain steps: a retry loop with backoff.</figcaption>
+  </figure>
+</section>
+
+<section class="topic" id="uml">
+  <h2>Unified Modeling Language (UML)</h2>
+  <p>UML is a standard set of diagrams for describing software. Structure is shown with class diagrams, behavior with state and activity diagrams, and interactions with sequence diagrams. A shared notation makes design discussions and handoffs clearer.</p>
+  <figure>
+    <svg viewBox="0 0 640 240" role="img" aria-label="Sequence diagram of a client calling a service and a database">
+      <rect class="box-a" x="40" y="10" width="110" height="36" rx="6"/><text class="t" x="95" y="33" text-anchor="middle">Client</text>
+      <rect class="box-g" x="260" y="10" width="110" height="36" rx="6"/><text class="t" x="315" y="33" text-anchor="middle">Service</text>
+      <rect class="box-w" x="480" y="10" width="110" height="36" rx="6"/><text class="t" x="535" y="33" text-anchor="middle">Database</text>
+      <path class="ln" d="M95 46 L95 230 M315 46 L315 230 M535 46 L535 230" stroke-dasharray="4 4"/>
+      <path class="ln-a flow" marker-end="url(#m-a)" d="M95 85 L315 85"/>
+      <text class="tm" x="205" y="78" text-anchor="middle">GET /orders</text>
+      <path class="ln-g flow" marker-end="url(#m-g)" d="M315 125 L535 125"/>
+      <text class="tm" x="425" y="118" text-anchor="middle">SELECT</text>
+      <path class="ln-g flow" marker-end="url(#m-g)" d="M535 165 L315 165"/>
+      <text class="tm" x="425" y="158" text-anchor="middle">rows</text>
+      <path class="ln-a flow" marker-end="url(#m-a)" d="M315 205 L95 205"/>
+      <text class="tm" x="205" y="198" text-anchor="middle">200 OK</text>
+    </svg>
+    <figcaption>A sequence diagram shows the order of messages between parts.</figcaption>
+  </figure>
+</section>
+
+<section class="topic" id="apis">
+  <h2>APIs and contracts</h2>
+  <p>An API is the set of rules and operations one component exposes to others, so they can work together without knowing each other's internals. A <strong>contract</strong> is a precise, checkable description of what the API accepts and returns, and of the behavior callers can rely on. Contracts let teams change internals safely and catch breaking changes early.</p>
+  <figure>
+    <svg viewBox="0 0 640 210" role="img" aria-label="Client and server agree on a request and response contract">
+      <rect class="box-a" x="30" y="70" width="150" height="70" rx="10"/>
+      <text class="tb" x="105" y="100" text-anchor="middle">Client</text>
+      <text class="tm" x="105" y="120" text-anchor="middle">expects the contract</text>
+      <rect class="box-g" x="460" y="70" width="150" height="70" rx="10"/>
+      <text class="tb" x="535" y="100" text-anchor="middle">Server</text>
+      <text class="tm" x="535" y="120" text-anchor="middle">implements the contract</text>
+      <path class="ln-a flow" marker-end="url(#m-a)" d="M182 95 L458 95"/>
+      <text class="tm" x="320" y="88" text-anchor="middle">request</text>
+      <path class="ln-g flow" marker-end="url(#m-g)" d="M458 125 L182 125"/>
+      <text class="tm" x="320" y="142" text-anchor="middle">response</text>
+      <rect class="box" x="230" y="165" width="180" height="32" rx="6"/>
+      <text class="t" x="320" y="186" text-anchor="middle">shared schema / spec</text>
+      <circle r="5" fill="var(--warn)"><animateMotion dur="2.6s" repeatCount="indefinite" path="M182 95 L458 95"/></circle>
+    </svg>
+    <figcaption>Both sides rely on the same written agreement, so changes can be checked against it.</figcaption>
+  </figure>
+</section>
+
+</main>
+</body>
+</html>
