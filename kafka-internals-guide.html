@@ -1,0 +1,2714 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Apache Kafka: Internals and Reference</title>
+    <link rel="stylesheet" href="styles.css" />
+    <style>
+      table.ref {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 10px 0;
+        font-size: 0.92rem;
+      }
+      table.ref th,
+      table.ref td {
+        border: 1px solid var(--line);
+        padding: 7px 9px;
+        text-align: left;
+        vertical-align: top;
+      }
+      table.ref th {
+        background: var(--bg);
+      }
+      .verify {
+        border-left: 4px solid var(--warn);
+        background: var(--bg);
+        padding: 10px 14px;
+        border-radius: 8px;
+        font-size: 0.95rem;
+      }
+      .src {
+        font-size: 0.85rem;
+        color: var(--muted);
+        border-top: 1px dashed var(--line);
+        padding-top: 8px;
+        margin-top: 14px;
+      }
+      .src .unchecked {
+        color: var(--warn);
+      }
+      .fang {
+        background: var(--bg);
+        border-left: 4px solid var(--accent);
+        border-radius: 8px;
+        padding: 12px 14px;
+        margin: 14px 0 4px;
+        font-size: 0.95rem;
+      }
+      .fang strong {
+        color: var(--accent);
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Shared arrowhead definitions -->
+    <svg width="0" height="0" style="position: absolute" aria-hidden="true">
+      <defs>
+        <marker
+          id="m-m"
+          viewBox="0 0 10 10"
+          refX="9"
+          refY="5"
+          markerWidth="7"
+          markerHeight="7"
+          orient="auto"
+        >
+          <path d="M0,0 L10,5 L0,10 z" style="fill: var(--muted)" />
+        </marker>
+        <marker
+          id="m-a"
+          viewBox="0 0 10 10"
+          refX="9"
+          refY="5"
+          markerWidth="7"
+          markerHeight="7"
+          orient="auto"
+        >
+          <path d="M0,0 L10,5 L0,10 z" style="fill: var(--accent)" />
+        </marker>
+        <marker
+          id="m-g"
+          viewBox="0 0 10 10"
+          refX="9"
+          refY="5"
+          markerWidth="7"
+          markerHeight="7"
+          orient="auto"
+        >
+          <path d="M0,0 L10,5 L0,10 z" style="fill: var(--accent-2)" />
+        </marker>
+        <marker
+          id="m-w"
+          viewBox="0 0 10 10"
+          refX="9"
+          refY="5"
+          markerWidth="7"
+          markerHeight="7"
+          orient="auto"
+        >
+          <path d="M0,0 L10,5 L0,10 z" style="fill: var(--warn)" />
+        </marker>
+        <marker
+          id="m-v"
+          viewBox="0 0 10 10"
+          refX="9"
+          refY="5"
+          markerWidth="7"
+          markerHeight="7"
+          orient="auto"
+        >
+          <path d="M0,0 L10,5 L0,10 z" style="fill: var(--violet)" />
+        </marker>
+      </defs>
+    </svg>
+
+    <main>
+      <header>
+        <div class="part"><a href="/" class="back">&#8592; Back</a>Reference and internals</div>
+        <h1>Apache Kafka: Internals and Configuration</h1>
+        <p>
+          The detailed companion to the Kafka visual guide. It covers how the
+          broker stores data, how replication and elections work, how producers
+          and consumers behave in detail, and which configs matter. The text is
+          my own explanation.
+        </p>
+      </header>
+
+      <nav class="toc">
+        <h2>Contents</h2>
+        <ol>
+          <li><a href="#segments">Log segments and index files</a></li>
+          <li><a href="#batches">Record batches and compression</a></li>
+          <li><a href="#reads">Reads: page cache and zero-copy</a></li>
+          <li><a href="#producer">Producer internals</a></li>
+          <li><a href="#partitioner">Partitioner and key hashing</a></li>
+          <li><a href="#idempotence">Idempotent producer</a></li>
+          <li>
+            <a href="#replication">Replicas, fetches and the high watermark</a>
+          </li>
+          <li><a href="#epochs">Leader epochs and log truncation</a></li>
+          <li>
+            <a href="#election">Leader election, ISR and unclean election</a>
+          </li>
+          <li><a href="#kraft">KRaft: controllers and the metadata log</a></li>
+          <li>
+            <a href="#coordinator">Group coordinator and offset storage</a>
+          </li>
+          <li><a href="#heartbeats">Heartbeats and the poll loop</a></li>
+          <li><a href="#rebalance">Rebalance protocols and assignors</a></li>
+          <li><a href="#fetching">Consumer fetching, follower fetching</a></li>
+          <li><a href="#transactions">Transactions in detail</a></li>
+          <li><a href="#connect">Kafka Connect internals</a></li>
+          <li><a href="#streams">Kafka Streams internals</a></li>
+          <li>
+            <a href="#retention">Retention, compaction and tiered storage</a>
+          </li>
+          <li><a href="#security">Security and quotas</a></li>
+          <li><a href="#metrics">Metrics and failure playbook</a></li>
+          <li><a href="#tools">Command-line tools</a></li>
+          <li><a href="#configs">Configuration reference</a></li>
+          <li><a href="#deep-questions">Deep-dive interview questions</a></li>
+        </ol>
+      </nav>
+
+      <!-- ============ STORAGE ============ -->
+      <h2 class="group">Storage</h2>
+
+      <section class="topic" id="segments">
+        <h2>Log segments and index files</h2>
+        <p>
+          Each partition is a directory on a broker's disk, named
+          <code>topic-partition</code>. Inside are <strong>segments</strong>:
+          files that hold a contiguous range of offsets. A segment's file name
+          is its base offset, zero-padded to 20 digits. Only the newest segment,
+          the <em>active</em> one, accepts writes. Older segments are immutable,
+          which makes deletion and compaction simple.
+        </p>
+        <ul>
+          <li><code>.log</code>: the record batches themselves.</li>
+          <li>
+            <code>.index</code>: a <strong>sparse</strong> map from offset to
+            byte position in the <code>.log</code>. An entry is written about
+            every <code>log.index.interval.bytes</code> (4 KB by default).
+          </li>
+          <li>
+            <code>.timeindex</code>: a sparse map from timestamp to offset, used
+            for "give me the first record after time T".
+          </li>
+          <li>
+            <code>.snapshot</code> files: producer state for idempotence and
+            transactions. <code>leader-epoch-checkpoint</code> records where
+            each leader epoch started.
+          </li>
+        </ul>
+        <figure>
+          <svg
+            viewBox="0 0 640 250"
+            role="img"
+            aria-label="A partition directory with segment files, and a lookup that uses the index to find a byte position in the log"
+          >
+            <rect
+              class="box"
+              x="20"
+              y="20"
+              width="270"
+              height="210"
+              rx="10"
+              stroke-dasharray="4 4"
+            />
+            <text class="tb" x="155" y="42" text-anchor="middle">
+              orders-0/
+            </text>
+            <rect class="box-g" x="40" y="56" width="230" height="30" rx="5" />
+            <text class="t" x="155" y="75" text-anchor="middle">
+              00000000000000000000.log
+            </text>
+            <rect class="box-g" x="40" y="94" width="230" height="30" rx="5" />
+            <text class="t" x="155" y="113" text-anchor="middle">
+              00000000000000000000.index
+            </text>
+            <rect class="box-a" x="40" y="132" width="230" height="30" rx="5" />
+            <text class="t" x="155" y="151" text-anchor="middle">
+              00000000000000000850.log (active)
+            </text>
+            <rect class="box-a" x="40" y="170" width="230" height="30" rx="5" />
+            <text class="t" x="155" y="189" text-anchor="middle">
+              00000000000000000850.index
+            </text>
+            <rect class="box-w" x="340" y="50" width="280" height="40" rx="8" />
+            <text class="t" x="480" y="75" text-anchor="middle">
+              Consumer asks for offset 900
+            </text>
+            <rect
+              class="box-v"
+              x="340"
+              y="115"
+              width="280"
+              height="40"
+              rx="8"
+            />
+            <text class="t" x="480" y="140" text-anchor="middle">
+              Index: nearest entry ≤ 900 is at byte 16384
+            </text>
+            <rect
+              class="box-g"
+              x="340"
+              y="180"
+              width="280"
+              height="40"
+              rx="8"
+            />
+            <text class="t" x="480" y="205" text-anchor="middle">
+              Scan the .log forward from byte 16384 to 900
+            </text>
+            <path
+              class="ln-w flow"
+              marker-end="url(#m-w)"
+              d="M480 90 L480 115"
+            />
+            <path
+              class="ln-v flow"
+              marker-end="url(#m-v)"
+              d="M480 155 L480 180"
+            />
+            <path
+              class="ln-a flow"
+              marker-end="url(#m-a)"
+              d="M340 200 L270 150"
+            />
+            <circle r="5" fill="var(--warn)">
+              <animateMotion
+                dur="2.6s"
+                repeatCount="indefinite"
+                path="M480 90 L480 115"
+              />
+            </circle>
+            <circle r="5" fill="var(--violet)">
+              <animateMotion
+                dur="2.6s"
+                begin="1.3s"
+                repeatCount="indefinite"
+                path="M480 155 L480 180"
+              />
+            </circle>
+          </svg>
+          <figcaption>
+            To find an offset, the broker binary-searches the segment names,
+            uses the sparse index to get close, then scans a short range of the
+            log.
+          </figcaption>
+        </figure>
+        <div class="fang">
+          <strong>Interview lens:</strong> This design explains why Kafka keeps
+          up with heavy writes and reads. Writes are sequential appends, reads
+          are mostly sequential scans, and the index stays small enough to keep
+          in memory.
+        </div>
+        <p class="src">
+          <strong>Sources:</strong>
+          <a href="https://kafka.apache.org/documentation/#persistence" target="_blank"
+            >Docs: Persistence (log and index files)</a
+          >
+          <em>not read</em>
+        </p>
+      </section>
+
+      <section class="topic" id="batches">
+        <h2>Record batches and compression</h2>
+        <p>
+          Producers send records in <strong>batches</strong>, and the broker
+          stores batches as they arrive. The batch header carries what the
+          broker needs for offsets, leader epochs, checksums, transactions and
+          idempotence. Compression applies to the whole batch, so compressing
+          larger batches compresses better.
+        </p>
+        <figure>
+          <svg
+            viewBox="0 0 640 340"
+            role="img"
+            aria-label="Layout of a record batch header and its records"
+          >
+            <rect class="box-a" x="40" y="16" width="360" height="26" rx="4" />
+            <text class="t" x="220" y="34" text-anchor="middle">
+              Base offset (first offset in batch)
+            </text>
+            <rect class="box-a" x="40" y="46" width="360" height="26" rx="4" />
+            <text class="t" x="220" y="64" text-anchor="middle">
+              Batch length
+            </text>
+            <rect class="box-a" x="40" y="76" width="360" height="26" rx="4" />
+            <text class="t" x="220" y="94" text-anchor="middle">
+              Partition leader epoch
+            </text>
+            <rect class="box" x="40" y="106" width="360" height="26" rx="4" />
+            <text class="t" x="220" y="124" text-anchor="middle">
+              Magic (format version), CRC
+            </text>
+            <rect class="box-w" x="40" y="136" width="360" height="26" rx="4" />
+            <text class="t" x="220" y="154" text-anchor="middle">
+              Attributes: compression, transactional, control
+            </text>
+            <rect class="box-v" x="40" y="166" width="360" height="26" rx="4" />
+            <text class="t" x="220" y="184" text-anchor="middle">
+              Producer ID and producer epoch
+            </text>
+            <rect class="box-v" x="40" y="196" width="360" height="26" rx="4" />
+            <text class="t" x="220" y="214" text-anchor="middle">
+              Base sequence (for idempotence)
+            </text>
+            <rect class="box" x="40" y="226" width="360" height="26" rx="4" />
+            <text class="t" x="220" y="244" text-anchor="middle">
+              Record count
+            </text>
+            <rect class="box-g" x="40" y="256" width="360" height="66" rx="4" />
+            <text class="t" x="220" y="276" text-anchor="middle">
+              Records (compressed as one block if enabled)
+            </text>
+            <text class="tm" x="220" y="294" text-anchor="middle">
+              offset delta · timestamp delta · key · value · headers
+            </text>
+            <text class="tm" x="220" y="310" text-anchor="middle">
+              each record stores deltas, not absolute values
+            </text>
+            <text class="tm" x="430" y="60">
+              Batch-level fields are the reason
+            </text>
+            <text class="tm" x="430" y="78">
+              idempotence and transactions are cheap:
+            </text>
+            <text class="tm" x="430" y="96">
+              the broker checks one header, not each record.
+            </text>
+            <text class="tm" x="430" y="290">
+              Compression types: none, gzip,
+            </text>
+            <text class="tm" x="430" y="308">snappy, lz4, zstd.</text>
+          </svg>
+          <figcaption>
+            One batch header covers many records. Offsets and timestamps inside
+            the batch are stored as small deltas.
+          </figcaption>
+        </figure>
+        <p>
+          The broker usually stores batches exactly as received and avoids
+          decompressing them. It has to decompress only when it must validate or
+          convert the batch, or when the topic's
+          <code>compression.type</code> differs from the producer's. That is why
+          end-to-end compression works well on the broker side.
+        </p>
+        <p class="src">
+          <strong>Sources:</strong>
+          <a href="https://kafka.apache.org/documentation/#messageformat" target="_blank"
+            >Docs: Message format</a
+          >
+          <em>not read</em> ·
+          <a
+            href="https://cwiki.apache.org/confluence/display/KAFKA/KIP-98+-+Exactly+Once+Delivery+and+Transactional+Messaging"
+            >KIP-98</a
+          >
+          <em>checked</em>
+        </p>
+      </section>
+
+      <section class="topic" id="reads">
+        <h2>Reads: page cache and zero-copy</h2>
+        <p>
+          Kafka does not keep its own large in-memory cache of records. It
+          relies on the operating system's <strong>page cache</strong>. Recent
+          writes are usually still in memory, so consumers that read near the
+          end of the log are served from RAM. For consumers that read further
+          back, the broker uses <code>sendfile</code>, which moves bytes from
+          the page cache to the network socket inside the kernel, skipping the
+          copy into broker user space.
+        </p>
+        <figure>
+          <svg
+            viewBox="0 0 640 220"
+            role="img"
+            aria-label="Zero-copy path: disk to page cache to socket to consumer, skipping a user-space copy"
+          >
+            <rect class="box-a" x="20" y="100" width="120" height="50" rx="8" />
+            <text class="tb" x="80" y="123" text-anchor="middle">
+              Log segment
+            </text>
+            <text class="tm" x="80" y="139" text-anchor="middle">on disk</text>
+            <rect
+              class="box-g"
+              x="200"
+              y="100"
+              width="120"
+              height="50"
+              rx="8"
+            />
+            <text class="tb" x="260" y="123" text-anchor="middle">
+              Page cache
+            </text>
+            <text class="tm" x="260" y="139" text-anchor="middle">
+              in kernel
+            </text>
+            <rect
+              class="box-v"
+              x="380"
+              y="100"
+              width="110"
+              height="50"
+              rx="8"
+            />
+            <text class="tb" x="435" y="123" text-anchor="middle">Socket</text>
+            <text class="tm" x="435" y="139" text-anchor="middle">
+              network buffer
+            </text>
+            <rect class="box" x="520" y="100" width="100" height="50" rx="8" />
+            <text class="tb" x="570" y="123" text-anchor="middle">
+              Consumer
+            </text>
+            <path
+              class="ln-a flow"
+              marker-end="url(#m-a)"
+              d="M140 125 L200 125"
+            />
+            <path
+              class="ln-g flow"
+              marker-end="url(#m-g)"
+              d="M320 125 L380 125"
+            />
+            <path
+              class="ln-v flow"
+              marker-end="url(#m-v)"
+              d="M490 125 L520 125"
+            />
+            <path
+              class="ln-w flow"
+              marker-end="url(#m-w)"
+              d="M260 100 Q320 30 435 100"
+            />
+            <text class="tm" x="330" y="46" text-anchor="middle">
+              sendfile: skips the copy into broker user space
+            </text>
+            <circle r="5" fill="var(--accent)">
+              <animateMotion
+                dur="2.6s"
+                repeatCount="indefinite"
+                path="M140 125 L200 125"
+              />
+            </circle>
+            <circle r="5" fill="var(--warn)">
+              <animateMotion
+                dur="2.6s"
+                repeatCount="indefinite"
+                path="M260 100 Q320 30 435 100"
+              />
+            </circle>
+            <text class="tm" x="20" y="200">
+              With TLS on, data must pass through user space to be encrypted, so
+              the zero-copy path is lost.
+            </text>
+          </svg>
+          <figcaption>
+            Consumers near the end of the log are served from memory. Sendfile
+            keeps older reads efficient without copying each byte through the
+            broker.
+          </figcaption>
+        </figure>
+        <p class="src">
+          <strong>Sources:</strong>
+          <a href="https://kafka.apache.org/documentation/#persistence" target="_blank"
+            >Docs: Persistence (page cache and file system)</a
+          >
+          <em>not read</em>
+        </p>
+      </section>
+
+      <!-- ============ PRODUCING ============ -->
+      <h2 class="group">Producing</h2>
+
+      <section class="topic" id="producer">
+        <h2>Producer internals</h2>
+        <p>
+          When your code calls <code>send()</code>, the producer does not send
+          anything right away. It serializes the record, chooses a partition,
+          and appends it to a <strong>record accumulator</strong>, which holds
+          one queue of batches per partition. A background
+          <strong>sender thread</strong> drains ready batches, groups them by
+          broker, and sends them. A batch is ready when it is full
+          (<code>batch.size</code>) or its wait has reached
+          <code>linger.ms</code>.
+        </p>
+        <figure>
+          <svg
+            viewBox="0 0 640 230"
+            role="img"
+            aria-label="Application thread serializes and partitions records into an accumulator; a sender thread drains batches to partition leaders"
+          >
+            <rect class="box-a" x="10" y="85" width="110" height="50" rx="8" />
+            <text class="tb" x="65" y="108" text-anchor="middle">
+              Application
+            </text>
+            <text class="tm" x="65" y="124" text-anchor="middle">send()</text>
+            <rect class="box" x="150" y="85" width="130" height="50" rx="8" />
+            <text class="tb" x="215" y="108" text-anchor="middle">
+              Serialize +
+            </text>
+            <text class="tm" x="215" y="124" text-anchor="middle">
+              partition
+            </text>
+            <rect
+              class="box-g"
+              x="310"
+              y="30"
+              width="170"
+              height="140"
+              rx="8"
+            />
+            <text class="tb" x="395" y="52" text-anchor="middle">
+              Record accumulator
+            </text>
+            <rect class="box" x="326" y="66" width="138" height="28" rx="4" />
+            <text class="t" x="395" y="84" text-anchor="middle">
+              P0: [batch][batch]
+            </text>
+            <rect class="box" x="326" y="102" width="138" height="28" rx="4" />
+            <text class="t" x="395" y="120" text-anchor="middle">
+              P1: [batch]
+            </text>
+            <rect class="box" x="326" y="138" width="138" height="22" rx="4" />
+            <text class="tm" x="395" y="153" text-anchor="middle">
+              bounded by buffer.memory
+            </text>
+            <rect class="box-v" x="510" y="85" width="120" height="50" rx="8" />
+            <text class="tb" x="570" y="108" text-anchor="middle">
+              Sender thread
+            </text>
+            <text class="tm" x="570" y="124" text-anchor="middle">
+              one per client
+            </text>
+            <rect class="box" x="510" y="170" width="120" height="44" rx="8" />
+            <text class="t" x="570" y="190" text-anchor="middle">
+              Partition leaders
+            </text>
+            <text class="tm" x="570" y="206" text-anchor="middle">brokers</text>
+            <path
+              class="ln-a flow"
+              marker-end="url(#m-a)"
+              d="M120 110 L150 110"
+            />
+            <path
+              class="ln-a flow"
+              marker-end="url(#m-a)"
+              d="M280 110 L310 110"
+            />
+            <path
+              class="ln-g flow"
+              marker-end="url(#m-g)"
+              d="M448 110 L510 110"
+            />
+            <path
+              class="ln-v flow"
+              marker-end="url(#m-v)"
+              d="M570 135 L570 170"
+            />
+            <circle r="5" fill="var(--accent)">
+              <animateMotion
+                dur="2.6s"
+                repeatCount="indefinite"
+                path="M120 110 L150 110"
+              />
+            </circle>
+            <circle r="5" fill="var(--accent-2)">
+              <animateMotion
+                dur="2.6s"
+                begin="1.3s"
+                repeatCount="indefinite"
+                path="M448 110 L510 110"
+              />
+            </circle>
+            <circle r="5" fill="var(--violet)">
+              <animateMotion
+                dur="2.6s"
+                begin="0.6s"
+                repeatCount="indefinite"
+                path="M570 135 L570 170"
+              />
+            </circle>
+          </svg>
+          <figcaption>
+            Records are batched per partition in memory. The sender thread
+            decides when to send and how many requests can be outstanding.
+          </figcaption>
+        </figure>
+        <ul>
+          <li>
+            <strong>Blocking</strong>: when <code>buffer.memory</code> is full,
+            <code>send()</code> blocks for up to <code>max.block.ms</code>, then
+            throws. A slow broker shows up first as blocked producers.
+          </li>
+          <li>
+            <strong>Throughput levers</strong>: larger <code>batch.size</code>,
+            a small non-zero <code>linger.ms</code>, and compression. Each one
+            trades a little latency for much better throughput.
+          </li>
+          <li>
+            <strong>In-flight requests</strong>:
+            <code>max.in.flight.requests.per.connection</code> limits
+            unacknowledged requests per broker connection. With retries enabled
+            and idempotence off, a value above 1 can reorder records.
+          </li>
+          <li>
+            <strong>Time budget</strong>: <code>delivery.timeout.ms</code> is
+            the total time from <code>send()</code> to success or failure,
+            including retries and waiting in the accumulator.
+            <code>request.timeout.ms</code> applies to one request.
+          </li>
+        </ul>
+        <div class="fang">
+          <strong>Interview lens:</strong> If asked how to raise throughput
+          without losing data, mention batching, <code>linger.ms</code>,
+          compression and async sends with a callback. Note that the callback is
+          where failures show up, not the return from <code>send()</code>.
+        </div>
+        <p class="src">
+          <strong>Sources:</strong>
+          <a href="https://kafka.apache.org/documentation/#producerconfigs" target="_blank"
+            >Docs: Producer configs</a
+          >
+          <em>not read</em> ·
+          <a href="https://kafka.apache.org/documentation/#api"
+            >Docs: Producer API</a
+          >
+          <em>not read</em>
+        </p>
+      </section>
+
+      <section class="topic" id="partitioner">
+        <h2>Partitioner and key hashing</h2>
+        <p>
+          For a record with a key, the default partitioner hashes the serialized
+          key (murmur2) and takes it modulo the partition count. Two
+          consequences matter. Equal keys always map to the same partition while
+          the count stays the same. Changing the partition count remaps keys, so
+          ordering for existing keys can break across the change.
+        </p>
+        <p>
+          Records without a key use a <strong>sticky partitioner</strong>. The
+          producer fills one partition's batch, then switches to another. This
+          gives bigger batches and fewer requests than random placement. A
+          custom partitioner can implement any rule, such as routing a known hot
+          key to a dedicated partition.
+        </p>
+        <p class="src">
+          <strong>Sources:</strong>
+          <a href="https://kafka.apache.org/documentation/#producerconfigs" target="_blank"
+            >Docs: Producer configs (partitioner.class)</a
+          >
+          <em>not read</em> ·
+          <span class="unchecked">KIP-480 sticky partitioner, from memory</span>
+        </p>
+      </section>
+
+      <section class="topic" id="idempotence">
+        <h2>Idempotent producer</h2>
+        <p>
+          With <code>enable.idempotence=true</code>, the broker assigns the
+          producer a <strong>producer ID</strong> and an epoch. Each batch
+          carries a per-partition <strong>sequence number</strong>. The broker
+          remembers the latest sequence numbers per producer and partition. A
+          retried batch that it has already stored is recognized and dropped,
+          and the producer gets the original acknowledgement. A batch that
+          arrives out of order is rejected.
+        </p>
+        <figure>
+          <svg
+            viewBox="0 0 640 210"
+            role="img"
+            aria-label="Producer retries a batch whose sequence number is already stored; the broker drops the duplicate and acknowledges it"
+          >
+            <rect class="box-a" x="20" y="70" width="150" height="70" rx="8" />
+            <text class="tb" x="95" y="98" text-anchor="middle">Producer</text>
+            <text class="tm" x="95" y="116" text-anchor="middle">
+              PID 42, epoch 0
+            </text>
+            <rect class="box" x="290" y="30" width="330" height="130" rx="10" />
+            <text class="tb" x="455" y="52" text-anchor="middle">
+              Partition log on broker
+            </text>
+            <rect class="box-g" x="310" y="70" width="90" height="36" rx="5" />
+            <text class="t" x="355" y="93" text-anchor="middle">seq 0</text>
+            <rect class="box-g" x="410" y="70" width="90" height="36" rx="5" />
+            <text class="t" x="455" y="93" text-anchor="middle">seq 1</text>
+            <rect class="box-g" x="510" y="70" width="90" height="36" rx="5" />
+            <text class="t" x="555" y="93" text-anchor="middle">seq 2</text>
+            <text class="tm" x="455" y="136" text-anchor="middle">
+              broker remembers last sequence per producer
+            </text>
+            <path
+              class="ln-a flow"
+              marker-end="url(#m-a)"
+              d="M170 92 L290 92"
+            />
+            <text class="tm" x="230" y="84" text-anchor="middle">seq 3</text>
+            <path
+              class="ln-w flow"
+              marker-end="url(#m-w)"
+              d="M170 130 L290 130"
+            />
+            <text class="tm" x="230" y="150" text-anchor="middle">
+              retry seq 2
+            </text>
+            <text class="t" x="20" y="186">
+              Broker: seq 3 is the next expected, so it is stored. The retry of
+              seq 2 is a duplicate, so it is not written again.
+            </text>
+            <circle r="5" fill="var(--accent)">
+              <animateMotion
+                dur="2.6s"
+                repeatCount="indefinite"
+                path="M170 92 L290 92"
+              />
+            </circle>
+            <circle r="5" fill="var(--warn)">
+              <animateMotion
+                dur="2.6s"
+                begin="1.3s"
+                repeatCount="indefinite"
+                path="M170 130 L290 130"
+              />
+            </circle>
+          </svg>
+          <figcaption>
+            The sequence numbers turn retries into safe duplicates. Each
+            partition's ordering is preserved for up to five in-flight batches.
+          </figcaption>
+        </figure>
+        <p>
+          Idempotence covers duplicates from producer retries within one session
+          of a producer. It does not cover duplicates from your application
+          calling <code>send()</code> twice. The epoch also fences old
+          instances: when a new instance starts with the same
+          <code>transactional.id</code>, the broker rejects the old one.
+        </p>
+        <p class="src">
+          <strong>Sources:</strong>
+          <a target="_blank"
+            href="https://cwiki.apache.org/confluence/display/KAFKA/KIP-98+-+Exactly+Once+Delivery+and+Transactional+Messaging"
+            >KIP-98</a
+          >
+          <em>checked</em> ·
+          <a href="https://kafka.apache.org/documentation/#semantics"
+            >Docs: Delivery semantics</a
+          >
+          <em>not read</em>
+        </p>
+      </section>
+
+      <!-- ============ REPLICATION ============ -->
+      <h2 class="group">Replication and the control plane</h2>
+
+      <section class="topic" id="replication">
+        <h2>Replicas, fetches and the high watermark</h2>
+        <p>
+          Followers replicate by <strong>fetching</strong> from the leader,
+          using the same fetch protocol as consumers. The leader tracks each
+          follower's <strong>log end offset (LEO)</strong>, which is the next
+          offset that replica will write. The
+          <strong>high watermark (HW)</strong> is the smallest LEO among the
+          in-sync replicas. Offsets below the HW are committed. Consumers can
+          read only up to the HW.
+        </p>
+        <figure>
+          <svg
+            viewBox="0 0 640 230"
+            role="img"
+            aria-label="Followers fetch from the leader; the leader returns records; LEO and high watermark values shown for each replica"
+          >
+            <rect
+              class="box-a"
+              x="40"
+              y="70"
+              width="190"
+              height="110"
+              rx="10"
+            />
+            <text class="tb" x="135" y="96" text-anchor="middle">
+              Leader (P0)
+            </text>
+            <text class="t" x="135" y="120" text-anchor="middle">LEO = 9</text>
+            <text class="t" x="135" y="142" text-anchor="middle">
+              High watermark = 7
+            </text>
+            <rect
+              class="box-g"
+              x="400"
+              y="26"
+              width="200"
+              height="66"
+              rx="10"
+            />
+            <text class="tb" x="500" y="50" text-anchor="middle">
+              Follower A
+            </text>
+            <text class="t" x="500" y="72" text-anchor="middle">LEO = 8</text>
+            <rect
+              class="box-g"
+              x="400"
+              y="140"
+              width="200"
+              height="66"
+              rx="10"
+            />
+            <text class="tb" x="500" y="164" text-anchor="middle">
+              Follower B
+            </text>
+            <text class="t" x="500" y="186" text-anchor="middle">LEO = 7</text>
+            <path class="ln flow" marker-end="url(#m-m)" d="M400 58 L230 84" />
+            <path
+              class="ln-g flow"
+              marker-end="url(#m-g)"
+              d="M230 100 L400 74"
+            />
+            <path
+              class="ln flow"
+              marker-end="url(#m-m)"
+              d="M400 172 L230 150"
+            />
+            <path
+              class="ln-g flow"
+              marker-end="url(#m-g)"
+              d="M230 160 L400 186"
+            />
+            <text class="tm" x="315" y="54" text-anchor="middle">
+              fetch from offset 8
+            </text>
+            <text class="tm" x="315" y="200" text-anchor="middle">
+              fetch from offset 7
+            </text>
+            <circle r="5" fill="var(--muted)">
+              <animateMotion
+                dur="2.6s"
+                repeatCount="indefinite"
+                path="M400 58 L230 84"
+              />
+            </circle>
+            <circle r="5" fill="var(--accent-2)">
+              <animateMotion
+                dur="2.6s"
+                begin="1.3s"
+                repeatCount="indefinite"
+                path="M230 160 L400 186"
+              />
+            </circle>
+            <text class="tm" x="20" y="222">
+              Grey arrows are fetch requests from followers. Green arrows are
+              the records returned by the leader.
+            </text>
+          </svg>
+          <figcaption>
+            The leader does not push to followers. Followers pull, and the
+            leader learns their progress from their fetch offsets.
+          </figcaption>
+        </figure>
+        <figure>
+          <svg
+            viewBox="0 0 640 130"
+            role="img"
+            aria-label="Offsets 0 to 8 on a log. Offsets 0 to 6 are committed and visible to consumers. Offsets 7 and 8 are not yet committed."
+          >
+            <rect class="box-g" x="20" y="40" width="54" height="30" rx="4" />
+            <text class="t" x="47" y="60" text-anchor="middle">0</text>
+            <rect class="box-g" x="80" y="40" width="54" height="30" rx="4" />
+            <text class="t" x="107" y="60" text-anchor="middle">1</text>
+            <rect class="box-g" x="140" y="40" width="54" height="30" rx="4" />
+            <text class="t" x="167" y="60" text-anchor="middle">2</text>
+            <rect class="box-g" x="200" y="40" width="54" height="30" rx="4" />
+            <text class="t" x="227" y="60" text-anchor="middle">3</text>
+            <rect class="box-g" x="260" y="40" width="54" height="30" rx="4" />
+            <text class="t" x="287" y="60" text-anchor="middle">4</text>
+            <rect class="box-g" x="320" y="40" width="54" height="30" rx="4" />
+            <text class="t" x="347" y="60" text-anchor="middle">5</text>
+            <rect class="box-g" x="380" y="40" width="54" height="30" rx="4" />
+            <text class="t" x="407" y="60" text-anchor="middle">6</text>
+            <rect
+              class="box-w"
+              x="440"
+              y="40"
+              width="54"
+              height="30"
+              rx="4"
+              stroke-dasharray="4 3"
+            />
+            <text class="t" x="467" y="60" text-anchor="middle">7</text>
+            <rect
+              class="box-w"
+              x="500"
+              y="40"
+              width="54"
+              height="30"
+              rx="4"
+              stroke-dasharray="4 3"
+            />
+            <text class="t" x="527" y="60" text-anchor="middle">8</text>
+            <line
+              x1="440"
+              y1="92"
+              x2="440"
+              y2="110"
+              stroke="var(--warn)"
+              stroke-width="2"
+            />
+            <text class="tb" x="440" y="124" text-anchor="middle">HW = 7</text>
+            <line
+              x1="560"
+              y1="92"
+              x2="560"
+              y2="110"
+              stroke="var(--muted)"
+              stroke-width="2"
+            />
+            <text class="tb" x="560" y="124" text-anchor="middle">LEO = 9</text>
+            <text class="tm" x="20" y="24">
+              Green: committed, visible to consumers. Dashed amber: on the
+              leader but not yet replicated to all ISR members.
+            </text>
+          </svg>
+          <figcaption>
+            Consumers see only offsets below the high watermark. This is why a
+            leader crash cannot expose data that the replicas never received.
+          </figcaption>
+        </figure>
+        <p class="src">
+          <strong>Sources:</strong>
+          <a href="https://kafka.apache.org/documentation/#replication" target="_blank"
+            >Docs: Replication</a
+          >
+          <em>not read</em>
+        </p>
+      </section>
+
+      <section class="topic" id="epochs">
+        <h2>Leader epochs and log truncation</h2>
+        <p>
+          Every leadership change starts a new <strong>leader epoch</strong>.
+          The leader records the offset where each epoch began. When a former
+          leader comes back as a follower, it must discard any records that the
+          new leader never received. Earlier versions decided this using the
+          high watermark, which could cause data loss or divergent logs in some
+          failure sequences. The fix (KIP-101) is to ask the new leader which
+          offset ends the old epoch, then truncate to that point.
+        </p>
+        <figure>
+          <svg
+            viewBox="0 0 640 220"
+            role="img"
+            aria-label="Old leader wrote offsets 5 and 6 in epoch 0 but they were never replicated. After the new leader starts epoch 1, the old leader truncates them."
+          >
+            <text class="tb" x="20" y="24">Old leader (broker 1), epoch 0</text>
+            <rect class="box-g" x="40" y="34" width="50" height="30" rx="4" />
+            <text class="t" x="65" y="54" text-anchor="middle">0</text>
+            <rect class="box-g" x="96" y="34" width="50" height="30" rx="4" />
+            <text class="t" x="121" y="54" text-anchor="middle">1</text>
+            <rect class="box-g" x="152" y="34" width="50" height="30" rx="4" />
+            <text class="t" x="177" y="54" text-anchor="middle">2</text>
+            <rect class="box-g" x="208" y="34" width="50" height="30" rx="4" />
+            <text class="t" x="233" y="54" text-anchor="middle">3</text>
+            <rect class="box-g" x="264" y="34" width="50" height="30" rx="4" />
+            <text class="t" x="289" y="54" text-anchor="middle">4</text>
+            <rect
+              class="box-w"
+              x="320"
+              y="34"
+              width="50"
+              height="30"
+              rx="4"
+              stroke-dasharray="4 3"
+            />
+            <text class="t" x="345" y="54" text-anchor="middle">5</text>
+            <rect
+              class="box-w"
+              x="376"
+              y="34"
+              width="50"
+              height="30"
+              rx="4"
+              stroke-dasharray="4 3"
+            />
+            <text class="t" x="401" y="54" text-anchor="middle">6</text>
+            <text class="tb" x="20" y="108">
+              New leader (broker 2), epoch 1 starts at offset 5
+            </text>
+            <rect class="box-g" x="40" y="118" width="50" height="30" rx="4" />
+            <text class="t" x="65" y="138" text-anchor="middle">0</text>
+            <rect class="box-g" x="96" y="118" width="50" height="30" rx="4" />
+            <text class="t" x="121" y="138" text-anchor="middle">1</text>
+            <rect class="box-g" x="152" y="118" width="50" height="30" rx="4" />
+            <text class="t" x="177" y="138" text-anchor="middle">2</text>
+            <rect class="box-g" x="208" y="118" width="50" height="30" rx="4" />
+            <text class="t" x="233" y="138" text-anchor="middle">3</text>
+            <rect class="box-g" x="264" y="118" width="50" height="30" rx="4" />
+            <text class="t" x="289" y="138" text-anchor="middle">4</text>
+            <rect class="box-a" x="320" y="118" width="50" height="30" rx="4" />
+            <text class="t" x="345" y="138" text-anchor="middle">5</text>
+            <rect class="box-a" x="376" y="118" width="50" height="30" rx="4" />
+            <text class="t" x="401" y="138" text-anchor="middle">6</text>
+            <path
+              class="ln-v flow"
+              marker-end="url(#m-v)"
+              d="M420 150 L560 150"
+            />
+            <text class="tm" x="570" y="146">Rejoining</text>
+            <text class="t" x="20" y="186">
+              Old leader asks: where did epoch 0 end on the new leader? Answer:
+              offset 5. It truncates 5 and 6, then fetches from 5.
+            </text>
+            <circle r="5" fill="var(--violet)">
+              <animateMotion
+                dur="2.6s"
+                repeatCount="indefinite"
+                path="M420 150 L560 150"
+              />
+            </circle>
+          </svg>
+          <figcaption>
+            Epoch boundaries let a rejoining replica remove exactly the records
+            that were never committed under the new leader.
+          </figcaption>
+        </figure>
+        <p class="src">
+          <strong>Sources:</strong>
+          <a target="_blank"
+            href="https://cwiki.apache.org/confluence/spaces/KAFKA/pages/67634337/KIP-101+-+Alter+Replication+Protocol+to+use+Leader+Epoch+rather+than+High+Watermark+for+Truncation"
+            >KIP-101</a
+          >
+          <em>checked</em> ·
+          <a target="_blank"
+            href="https://cwiki.apache.org/confluence/spaces/KAFKA/pages/75978352/KIP-279+Fix+log+divergence+between+leader+and+follower+after+fast+leader+fail+over"
+            >KIP-279</a
+          >
+          <em>checked</em>
+        </p>
+      </section>
+
+      <section class="topic" id="election">
+        <h2>Leader election, ISR and unclean election</h2>
+        <p>
+          The <strong>ISR</strong> is the set of replicas that are caught up. A
+          follower falls out of the ISR when it has not caught up within
+          <code>replica.lag.time.max.ms</code>, and it rejoins once it catches
+          up. When a leader fails, the controller elects a new leader from the
+          ISR. That is the safe path: every replica it chooses holds all
+          committed records.
+        </p>
+        <ul>
+          <li>
+            <strong>Clean election</strong>: a new leader comes from the ISR. No
+            committed data is lost.
+          </li>
+          <li>
+            <strong>No ISR member available</strong>: with
+            <code>unclean.leader.election.enable=false</code>, the partition
+            stays offline until an ISR member returns. Availability is
+            sacrificed to protect data.
+          </li>
+          <li>
+            <strong>Unclean election</strong>: with it set to <code>true</code>,
+            an out-of-sync replica can become leader. The partition comes back
+            sooner, but records that the old leader had acknowledged, and that
+            no other replica copied, are lost.
+          </li>
+          <li>
+            <strong>min.insync.replicas</strong>: with <code>acks=all</code>, a
+            write fails if the ISR has fewer members than this value. That
+            protects durability when replicas are down, and it causes the
+            producer errors you see during outages.
+          </li>
+        </ul>
+        <div class="fang">
+          <strong>Interview lens:</strong> The durable setup is replication
+          factor 3, <code>min.insync.replicas=2</code>, <code>acks=all</code>,
+          and unclean election off. Be ready to explain the trade: one broker
+          can fail without losing acknowledged writes, but two failures make the
+          partition reject writes rather than risk data.
+        </div>
+        <p class="src">
+          <strong>Sources:</strong>
+          <a href="https://kafka.apache.org/documentation/#replication" target="_blank"
+            >Docs: Replication (ISR, unclean election)</a
+          >
+          <em>not read</em> ·
+          <a href="https://kafka.apache.org/documentation/#brokerconfigs" target="_blank"
+            >Docs: Broker configs</a
+          >
+          <em>not read</em>
+        </p>
+      </section>
+
+      <section class="topic" id="kraft">
+        <h2>KRaft: controllers and the metadata log</h2>
+        <p>
+          Cluster metadata includes topics, partition assignments, leaders,
+          ISRs, configs and ACLs. In <strong>KRaft</strong> mode, a set of
+          controller nodes forms a Raft quorum. The active controller appends
+          metadata changes to an internal log, <code>__cluster_metadata</code>.
+          Brokers fetch that log and apply it locally. A new active controller
+          is elected by Raft if the current one fails. Snapshots keep the log
+          from growing without limit. Kafka 4.0 removed the older
+          ZooKeeper-based mode.
+        </p>
+        <figure>
+          <svg
+            viewBox="0 0 640 200"
+            role="img"
+            aria-label="Controller quorum: one active controller replicates the metadata log to standby controllers and serves metadata to brokers"
+          >
+            <rect
+              class="box-v"
+              x="30"
+              y="30"
+              width="260"
+              height="130"
+              rx="10"
+            />
+            <text class="tb" x="160" y="54" text-anchor="middle">
+              Controller quorum (Raft)
+            </text>
+            <rect class="box-w" x="50" y="70" width="110" height="40" rx="6" />
+            <text class="t" x="105" y="94" text-anchor="middle">
+              Active controller
+            </text>
+            <rect class="box" x="180" y="70" width="90" height="40" rx="6" />
+            <text class="t" x="225" y="94" text-anchor="middle">Standby</text>
+            <rect class="box" x="50" y="120" width="220" height="30" rx="6" />
+            <text class="t" x="160" y="140" text-anchor="middle">
+              __cluster_metadata log
+            </text>
+            <rect
+              class="box-a"
+              x="380"
+              y="30"
+              width="230"
+              height="130"
+              rx="10"
+            />
+            <text class="tb" x="495" y="54" text-anchor="middle">Brokers</text>
+            <rect class="box" x="400" y="70" width="90" height="40" rx="6" />
+            <text class="t" x="445" y="94" text-anchor="middle">Broker 1</text>
+            <rect class="box" x="510" y="70" width="90" height="40" rx="6" />
+            <text class="t" x="555" y="94" text-anchor="middle">Broker 2</text>
+            <text class="tm" x="495" y="140" text-anchor="middle">
+              apply metadata locally
+            </text>
+            <path
+              class="ln-v flow"
+              marker-end="url(#m-v)"
+              d="M160 110 L225 110"
+            />
+            <path
+              class="ln-a flow"
+              marker-end="url(#m-a)"
+              d="M290 95 L380 95"
+            />
+            <circle r="5" fill="var(--violet)">
+              <animateMotion
+                dur="2.6s"
+                repeatCount="indefinite"
+                path="M160 110 L225 110"
+              />
+            </circle>
+            <circle r="5" fill="var(--accent)">
+              <animateMotion
+                dur="2.6s"
+                begin="1.3s"
+                repeatCount="indefinite"
+                path="M290 95 L380 95"
+              />
+            </circle>
+            <text class="tm" x="20" y="186">
+              Active controller replicates to standbys, then serves metadata
+              updates to brokers.
+            </text>
+          </svg>
+          <figcaption>
+            Metadata changes are written once to a replicated log, so every
+            broker applies the same sequence of changes.
+          </figcaption>
+        </figure>
+        <p class="src">
+          <strong>Sources:</strong>
+          <a href="https://kafka.apache.org/documentation/#kraft" target="_blank"
+            >Docs: KRaft</a
+          >
+          <em>not read</em> ·
+          <span class="unchecked"
+            >KIP-500 and KIP-595 (KIP-595 not found in search), from
+            memory</span
+          >
+        </p>
+      </section>
+
+      <!-- ============ CONSUMING ============ -->
+      <h2 class="group">Consuming</h2>
+
+      <section class="topic" id="coordinator">
+        <h2>Group coordinator and offset storage</h2>
+        <p>
+          Each consumer group is managed by one broker, its
+          <strong>group coordinator</strong>. The coordinator is the leader of
+          the partition of <code>__consumer_offsets</code> that the group ID
+          hashes to. Consumers talk to it for joining, syncing assignments,
+          heartbeats and offset commits. Committed offsets are stored as records
+          in <code>__consumer_offsets</code>, so they are replicated like any
+          other topic.
+        </p>
+        <figure>
+          <svg
+            viewBox="0 0 640 230"
+            role="img"
+            aria-label="Consumers send join, sync, heartbeat and offset commit requests to the group coordinator, which stores offsets in the consumer offsets topic"
+          >
+            <rect class="box-a" x="20" y="30" width="130" height="56" rx="8" />
+            <text class="tb" x="85" y="54" text-anchor="middle">
+              Consumer 1
+            </text>
+            <text class="tm" x="85" y="72" text-anchor="middle">
+              group member
+            </text>
+            <rect class="box-a" x="20" y="150" width="130" height="56" rx="8" />
+            <text class="tb" x="85" y="174" text-anchor="middle">
+              Consumer 2
+            </text>
+            <text class="tm" x="85" y="192" text-anchor="middle">
+              group member
+            </text>
+            <rect class="box-v" x="250" y="90" width="160" height="60" rx="8" />
+            <text class="tb" x="330" y="114" text-anchor="middle">
+              Group coordinator
+            </text>
+            <text class="tm" x="330" y="132" text-anchor="middle">
+              a broker
+            </text>
+            <rect class="box-g" x="470" y="90" width="150" height="60" rx="8" />
+            <text class="tb" x="545" y="114" text-anchor="middle">
+              __consumer_offsets
+            </text>
+            <text class="tm" x="545" y="132" text-anchor="middle">
+              replicated topic
+            </text>
+            <path
+              class="ln-a flow"
+              marker-end="url(#m-a)"
+              d="M150 52 L250 100"
+            />
+            <path
+              class="ln-a flow"
+              marker-end="url(#m-a)"
+              d="M150 172 L250 130"
+            />
+            <path
+              class="ln-g flow"
+              marker-end="url(#m-g)"
+              d="M410 120 L470 120"
+            />
+            <text class="tm" x="190" y="86">join, sync, heartbeat</text>
+            <text class="tm" x="440" y="110" text-anchor="middle">
+              offset commit
+            </text>
+            <circle r="5" fill="var(--accent)">
+              <animateMotion
+                dur="2.6s"
+                repeatCount="indefinite"
+                path="M150 52 L250 100"
+              />
+            </circle>
+            <circle r="5" fill="var(--accent-2)">
+              <animateMotion
+                dur="2.6s"
+                begin="1.3s"
+                repeatCount="indefinite"
+                path="M410 120 L470 120"
+              />
+            </circle>
+            <text class="tm" x="20" y="222">
+              Group ID hash picks the partition of __consumer_offsets, so each
+              group has one coordinator at a time.
+            </text>
+          </svg>
+          <figcaption>
+            The coordinator handles group membership and writes offsets to a
+            replicated topic. A coordinator move is handled by the same
+            leader-election path as any partition.
+          </figcaption>
+        </figure>
+        <p>
+          In the classic protocol, when the group changes, the coordinator asks
+          the members to re-join. One member, the group leader, computes the
+          partition assignment, and the coordinator sends each member its share
+          through the sync step. The newer protocol (KIP-848) moves the
+          assignment to the coordinator and sends incremental changes through
+          heartbeats.
+        </p>
+        <p class="src">
+          <strong>Sources:</strong>
+          <a target="_blank"
+            href="https://cwiki.apache.org/confluence/spaces/KAFKA/pages/217387038/KIP-848+The+Next+Generation+of+the+Consumer+Rebalance+Protocol"
+            >KIP-848</a
+          >
+          <em>checked</em> ·
+          <a href="https://kafka.apache.org/documentation/#consumerconfigs" target="_blank"
+            >Docs: Consumer configs</a
+          >
+          <em>not read</em>
+        </p>
+      </section>
+
+      <section class="topic" id="heartbeats">
+        <h2>Heartbeats and the poll loop</h2>
+        <p>
+          Two independent timers decide whether a consumer is alive. The
+          <strong>heartbeat thread</strong> sends heartbeats every
+          <code>heartbeat.interval.ms</code>. If the coordinator hears nothing
+          for <code>session.timeout.ms</code>, it removes the member. The
+          <strong>poll loop</strong> is your code calling <code>poll()</code>.
+          If the gap between two <code>poll()</code> calls exceeds
+          <code>max.poll.interval.ms</code>, the consumer leaves the group even
+          though its heartbeats are still arriving. That is the case where slow
+          processing causes rebalances.
+        </p>
+        <figure>
+          <svg
+            viewBox="0 0 640 170"
+            role="img"
+            aria-label="Timeline: heartbeats every few seconds on a separate thread; poll calls on the main thread with processing between them, bounded by max.poll.interval"
+          >
+            <line
+              x1="30"
+              y1="110"
+              x2="620"
+              y2="110"
+              stroke="var(--muted)"
+              stroke-width="1.5"
+              marker-end="url(#m-m)"
+            />
+            <text class="tm" x="610" y="130" text-anchor="end">time</text>
+            <text class="tb" x="20" y="30">Heartbeat thread</text>
+            <circle cx="90" cy="48" r="6" fill="var(--accent-2)" />
+            <circle cx="190" cy="48" r="6" fill="var(--accent-2)" />
+            <circle cx="290" cy="48" r="6" fill="var(--accent-2)" />
+            <circle cx="390" cy="48" r="6" fill="var(--accent-2)" />
+            <circle cx="490" cy="48" r="6" fill="var(--accent-2)" />
+            <text class="tm" x="190" y="66" text-anchor="middle">
+              heartbeat.interval.ms
+            </text>
+            <text class="tb" x="20" y="88">Poll thread</text>
+            <rect class="box-a" x="60" y="92" width="90" height="16" rx="3" />
+            <rect class="box-w" x="150" y="92" width="110" height="16" rx="3" />
+            <rect class="box-a" x="290" y="92" width="90" height="16" rx="3" />
+            <rect class="box-w" x="380" y="92" width="170" height="16" rx="3" />
+            <text class="tm" x="205" y="124" text-anchor="middle">
+              poll · process
+            </text>
+            <text class="tm" x="465" y="124" text-anchor="middle">
+              slow processing: gap before next poll
+            </text>
+            <path class="ln-w" d="M60 80 L60 80" />
+            <circle r="5" fill="var(--warn)">
+              <animateMotion
+                dur="3.6s"
+                repeatCount="indefinite"
+                path="M30 110 L620 110"
+              />
+            </circle>
+          </svg>
+          <figcaption>
+            Heartbeats keep a consumer in the group. Polls keep it working. A
+            slow poll loop gets removed even when heartbeats are healthy.
+          </figcaption>
+        </figure>
+        <ul>
+          <li>
+            <strong>max.poll.records</strong> caps how many records each poll
+            returns. Lowering it shortens each loop when processing is
+            expensive.
+          </li>
+          <li>
+            <strong>Long pauses</strong> from garbage collection, a blocked
+            thread or a slow downstream call can trigger the same removal as
+            slow processing.
+          </li>
+        </ul>
+        <p class="src">
+          <strong>Sources:</strong>
+          <a href="https://kafka.apache.org/documentation/#consumerconfigs" target="_blank"
+            >Docs: Consumer configs (heartbeat, poll timeouts)</a
+          >
+          <em>not read</em>
+        </p>
+      </section>
+
+      <section class="topic" id="rebalance">
+        <h2>Rebalance protocols and assignors</h2>
+        <p>
+          A rebalance is triggered by a member joining, leaving or timing out,
+          or by a topic's partition count changing. Protocol differences matter
+          for downtime:
+        </p>
+        <ul>
+          <li>
+            <strong>Eager</strong>: every member gives up all its partitions,
+            then the group reassigns them. Processing stops across the whole
+            group for the duration.
+          </li>
+          <li>
+            <strong>Cooperative (incremental)</strong>: members keep the
+            partitions they already have, and only the partitions that must move
+            are revoked and reassigned, in rounds. Most consumers keep
+            processing.
+          </li>
+          <li>
+            <strong>Consumer protocol (KIP-848)</strong>: an incremental
+            heartbeat-driven protocol where the coordinator computes
+            assignments. It reduces the time the group spends in a rebalance.
+          </li>
+        </ul>
+        <table class="ref">
+          <tr>
+            <th>Assignor</th>
+            <th>What it does</th>
+            <th>Watch for</th>
+          </tr>
+          <tr>
+            <td>RangeAssignor</td>
+            <td>Assigns contiguous partition ranges per topic</td>
+            <td>
+              Can overload the first consumers when several topics have the same
+              partition counts
+            </td>
+          </tr>
+          <tr>
+            <td>RoundRobinAssignor</td>
+            <td>Deals partitions out one by one across all topics</td>
+            <td>Moves many partitions on any membership change</td>
+          </tr>
+          <tr>
+            <td>StickyAssignor</td>
+            <td>Balances load and keeps existing assignments where possible</td>
+            <td>Eager protocol: stickiness still stops every consumer</td>
+          </tr>
+          <tr>
+            <td>CooperativeStickyAssignor</td>
+            <td>Sticky assignment with the cooperative protocol</td>
+            <td>
+              All members must support the cooperative protocol before the
+              upgrade completes
+            </td>
+          </tr>
+        </table>
+        <figure>
+          <svg
+            viewBox="0 0 640 240"
+            role="img"
+            aria-label="Eager rebalance stops all consumers; cooperative rebalance stops only the partitions that move"
+          >
+            <text class="tb" x="20" y="24">Eager</text>
+            <text class="tm" x="20" y="44">C1</text>
+            <rect class="box-a" x="60" y="34" width="200" height="20" rx="4" />
+            <rect class="box-w" x="260" y="34" width="120" height="20" rx="4" />
+            <rect class="box-g" x="380" y="34" width="200" height="20" rx="4" />
+            <text class="tm" x="20" y="72">C2</text>
+            <rect class="box-a" x="60" y="62" width="200" height="20" rx="4" />
+            <rect class="box-w" x="260" y="62" width="120" height="20" rx="4" />
+            <rect class="box-g" x="380" y="62" width="200" height="20" rx="4" />
+            <text class="tm" x="20" y="100">C3</text>
+            <rect class="box-w" x="60" y="90" width="120" height="20" rx="4" />
+            <rect class="box-g" x="180" y="90" width="400" height="20" rx="4" />
+            <text class="tm" x="320" y="128" text-anchor="middle">
+              amber = stopped for everyone
+            </text>
+            <text class="tb" x="20" y="158">Cooperative</text>
+            <text class="tm" x="20" y="178">C1</text>
+            <rect class="box-a" x="60" y="168" width="200" height="20" rx="4" />
+            <rect class="box-a" x="260" y="168" width="60" height="20" rx="4" />
+            <rect class="box-w" x="320" y="168" width="60" height="20" rx="4" />
+            <rect
+              class="box-a"
+              x="380"
+              y="168"
+              width="200"
+              height="20"
+              rx="4"
+            />
+            <text class="tm" x="20" y="206">C2</text>
+            <rect class="box-a" x="60" y="196" width="200" height="20" rx="4" />
+            <rect
+              class="box-a"
+              x="260"
+              y="196"
+              width="120"
+              height="20"
+              rx="4"
+            />
+            <rect
+              class="box-g"
+              x="380"
+              y="196"
+              width="200"
+              height="20"
+              rx="4"
+            />
+            <text class="tm" x="20" y="234">C3 joins</text>
+            <text class="tm" x="320" y="232" text-anchor="middle"></text>
+            <circle r="5" fill="var(--warn)">
+              <animateMotion
+                dur="2.6s"
+                repeatCount="indefinite"
+                path="M60 178 L500 178"
+              />
+            </circle>
+          </svg>
+          <figcaption>
+            In both rows, the bars show consumer activity. Cooperative
+            rebalancing stops one partition, not the whole group.
+          </figcaption>
+        </figure>
+        <div class="fang">
+          <strong>Interview lens:</strong> If asked why deploys cause a
+          processing pause, name the eager protocol and then the fix:
+          cooperative assignment, static membership so restarts don't trigger a
+          rebalance, and a session timeout long enough to cover a normal
+          restart.
+        </div>
+        <p>
+          <strong>Static membership</strong>: setting
+          <code>group.instance.id</code> makes a restarting consumer reclaim its
+          previous partitions without a rebalance, provided it rejoins within
+          <code>session.timeout.ms</code>. It suits stateful consumers and
+          rolling restarts.
+        </p>
+        <p class="src">
+          <strong>Sources:</strong>
+          <a target="_blank"
+            href="https://cwiki.apache.org/confluence/display/KAFKA/KIP-429:+Kafka+Consumer+Incremental+Rebalance+Protocol"
+            >KIP-429</a
+          >
+          <em>checked</em> ·
+          <a target="_blank"
+            href="https://cwiki.apache.org/confluence/spaces/KAFKA/pages/217387038/KIP-848+The+Next+Generation+of+the+Consumer+Rebalance+Protocol"
+            >KIP-848</a
+          >
+          <em>checked</em> ·
+          <a href="https://kafka.apache.org/documentation/#consumerconfigs" target="_blank"
+            >Docs: Consumer configs (partition.assignment.strategy)</a
+          >
+          <em>not read</em> ·
+          <span class="unchecked">KIP-345 static membership, from memory</span>
+        </p>
+      </section>
+
+      <section class="topic" id="fetching">
+        <h2>Consumer fetching and follower fetching</h2>
+        <p>
+          Consumers do not request one record at a time. Each fetch asks for
+          data across partitions, and the broker can hold the request open until
+          enough data is ready. That is <strong>long polling</strong>,
+          controlled by <code>fetch.min.bytes</code> and
+          <code>fetch.max.wait.ms</code>. Size limits are set per request
+          (<code>fetch.max.bytes</code>) and per partition
+          (<code>max.partition.fetch.bytes</code>).
+        </p>
+        <ul>
+          <li>
+            <strong>Fetch sessions</strong> let a consumer send only the
+            partitions that changed since its last request, which saves work for
+            consumers that read many partitions.
+          </li>
+          <li>
+            <strong>Follower fetching</strong> (KIP-392): with
+            <code>broker.rack</code> set on brokers and
+            <code>client.rack</code> set on consumers, a consumer reads from the
+            nearest replica. This cuts cross-zone traffic, which is often
+            billed. Reads may be slightly behind the leader.
+          </li>
+          <li>
+            <strong>auto.offset.reset</strong> applies only when the group has
+            no committed offset or the offset is out of range:
+            <code>earliest</code>, <code>latest</code>, or <code>none</code>,
+            which throws an error.
+          </li>
+        </ul>
+        <p class="src">
+          <strong>Sources:</strong>
+          <a target="_blank"
+            href="https://cwiki.apache.org/confluence/display/KAFKA/KIP-392:+Allow+consumers+to+fetch+from+closest+replica"
+            >KIP-392</a
+          >
+          <em>checked</em> ·
+          <a href="https://kafka.apache.org/documentation/#consumerconfigs" target="_blank"
+            >Docs: Consumer configs (fetch settings)</a
+          >
+          <em>not read</em>
+        </p>
+      </section>
+
+      <!-- ============ TRANSACTIONS ============ -->
+      <h2 class="group">Transactions</h2>
+
+      <section class="topic" id="transactions">
+        <h2>Transactions in detail</h2>
+        <p>
+          A transaction lets a producer write to several partitions and commit
+          the consumer offsets in the same atomic step. Four pieces make it
+          work:
+        </p>
+        <ul>
+          <li>
+            <strong>Transactional ID</strong>: a stable name for a logical
+            producer. It survives restarts, which is how the broker fences the
+            old instance.
+          </li>
+          <li>
+            <strong>Transaction coordinator</strong>: a broker that tracks the
+            state of each transaction in the internal topic
+            <code>__transaction_state</code>.
+          </li>
+          <li>
+            <strong>Control markers</strong>: commit or abort records written
+            into each partition the transaction touched.
+          </li>
+          <li>
+            <strong>Last stable offset (LSO)</strong>: the offset below which no
+            transaction is still open. <code>read_committed</code> consumers
+            read only up to the LSO and skip aborted records.
+          </li>
+        </ul>
+        <figure>
+          <svg
+            viewBox="0 0 640 270"
+            role="img"
+            aria-label="Producer registers partitions with the transaction coordinator, writes records, then the coordinator writes commit markers to each partition"
+          >
+            <rect class="box-a" x="20" y="100" width="130" height="56" rx="8" />
+            <text class="tb" x="85" y="124" text-anchor="middle">Producer</text>
+            <text class="tm" x="85" y="142" text-anchor="middle">
+              transactional.id
+            </text>
+            <rect class="box-v" x="250" y="20" width="170" height="56" rx="8" />
+            <text class="tb" x="335" y="44" text-anchor="middle">
+              Transaction coordinator
+            </text>
+            <text class="tm" x="335" y="62" text-anchor="middle">a broker</text>
+            <rect class="box" x="250" y="200" width="170" height="48" rx="8" />
+            <text class="t" x="335" y="222" text-anchor="middle">
+              __transaction_state
+            </text>
+            <text class="tm" x="335" y="238" text-anchor="middle">
+              txn state log
+            </text>
+            <rect
+              class="box-g"
+              x="480"
+              y="100"
+              width="150"
+              height="56"
+              rx="8"
+            />
+            <text class="tb" x="555" y="124" text-anchor="middle">
+              Partitions
+            </text>
+            <text class="tm" x="555" y="142" text-anchor="middle">
+              orders-0, payments-0
+            </text>
+            <path
+              class="ln-v flow"
+              marker-end="url(#m-v)"
+              d="M150 112 L250 66"
+            />
+            <text class="tm" x="170" y="80">1. register partitions</text>
+            <path
+              class="ln-a flow"
+              marker-end="url(#m-a)"
+              d="M150 140 L480 140"
+            />
+            <text class="tm" x="315" y="158" text-anchor="middle">
+              2. produce records (not yet visible)
+            </text>
+            <path
+              class="ln-w flow"
+              marker-end="url(#m-w)"
+              d="M335 76 L335 200"
+            />
+            <text class="tm" x="345" y="186">3. log state</text>
+            <path
+              class="ln-g flow"
+              marker-end="url(#m-g)"
+              d="M420 60 L480 110"
+            />
+            <text class="tm" x="470" y="58">4. commit marker</text>
+            <circle r="5" fill="var(--accent)">
+              <animateMotion
+                dur="2.6s"
+                repeatCount="indefinite"
+                path="M150 140 L480 140"
+              />
+            </circle>
+            <circle r="5" fill="var(--accent-2)">
+              <animateMotion
+                dur="2.6s"
+                begin="1.3s"
+                repeatCount="indefinite"
+                path="M420 60 L480 110"
+              />
+            </circle>
+            <text class="tm" x="20" y="262">
+              Commit or abort: the coordinator writes a marker to each
+              partition. Records become visible only after the commit marker.
+            </text>
+          </svg>
+          <figcaption>
+            The coordinator writes state first, then markers. A crash in the
+            middle is resolved by the coordinator's log, not by the producer.
+          </figcaption>
+        </figure>
+        <ul>
+          <li>
+            <strong>Consume-transform-produce</strong>:
+            <code>sendOffsetsToTransaction</code> adds the consumer's offset
+            commit to the same transaction, so output and progress move
+            together.
+          </li>
+          <li>
+            <strong>Cost</strong>: a transaction adds round trips to the
+            coordinator and waits for the markers. Use it for correctness, and
+            expect extra latency compared with plain writes.
+          </li>
+          <li>
+            <strong>Scope</strong>: exactly-once covers Kafka-to-Kafka work.
+            External systems still need idempotent writes or their own
+            transactions.
+          </li>
+          <li>
+            <strong>Timeouts</strong>:
+            <code>transaction.timeout.ms</code> aborts a transaction left open
+            by a crashed producer, which allows the LSO to move forward.
+          </li>
+        </ul>
+        <div class="fang">
+          <strong>Interview lens:</strong> Explain the chain in order:
+          transactional ID for fencing, coordinator state for recovery, markers
+          for visibility, LSO for consumers. Naming those four parts shows you
+          know what happens when a crash lands in the middle of a commit.
+        </div>
+        <p class="src">
+          <strong>Sources:</strong>
+          <a target="_blank"
+            href="https://cwiki.apache.org/confluence/display/KAFKA/KIP-98+-+Exactly+Once+Delivery+and+Transactional+Messaging"
+            >KIP-98</a
+          >
+          <em>checked</em> ·
+          <a href="https://kafka.apache.org/documentation/#design" target="_blank"
+            >Docs: Design (transactional messaging)</a
+          >
+          <em>not read</em>
+        </p>
+      </section>
+
+      <!-- ============ ECOSYSTEM ============ -->
+      <h2 class="group">Ecosystem</h2>
+
+      <section class="topic" id="connect">
+        <h2>Kafka Connect internals</h2>
+        <p>
+          Connect runs <strong>workers</strong>, which execute
+          <strong>connectors</strong>. A connector splits its work into
+          <strong>tasks</strong>, up to <code>tasks.max</code>, and the workers
+          in a cluster share those tasks. Configuration, offsets and status are
+          stored in three internal topics (<code>connect-configs</code>,
+          <code>connect-offsets</code>, <code>connect-status</code>), so a
+          worker can fail and the cluster reassigns its tasks.
+        </p>
+        <figure>
+          <svg
+            viewBox="0 0 640 230"
+            role="img"
+            aria-label="Source database to source task to Kafka topic to sink task to warehouse, with converters and transforms along the way"
+          >
+            <rect class="box-a" x="10" y="70" width="100" height="56" rx="8" />
+            <text class="tb" x="60" y="96" text-anchor="middle">Source DB</text>
+            <rect class="box-v" x="140" y="70" width="100" height="56" rx="8" />
+            <text class="t" x="190" y="96" text-anchor="middle">
+              Source task
+            </text>
+            <rect class="box-g" x="270" y="70" width="100" height="56" rx="8" />
+            <text class="tb" x="320" y="96" text-anchor="middle">
+              Kafka topic
+            </text>
+            <rect class="box-v" x="400" y="70" width="100" height="56" rx="8" />
+            <text class="t" x="450" y="96" text-anchor="middle">Sink task</text>
+            <rect class="box-a" x="530" y="70" width="100" height="56" rx="8" />
+            <text class="tb" x="580" y="96" text-anchor="middle">
+              Warehouse
+            </text>
+            <path
+              class="ln-a flow"
+              marker-end="url(#m-a)"
+              d="M110 98 L140 98"
+            />
+            <path
+              class="ln-v flow"
+              marker-end="url(#m-v)"
+              d="M240 98 L270 98"
+            />
+            <path
+              class="ln-g flow"
+              marker-end="url(#m-g)"
+              d="M370 98 L400 98"
+            />
+            <path
+              class="ln-v flow"
+              marker-end="url(#m-v)"
+              d="M500 98 L530 98"
+            />
+            <circle r="5" fill="var(--accent)">
+              <animateMotion
+                dur="3.2s"
+                repeatCount="indefinite"
+                path="M110 98 L140 98"
+              />
+            </circle>
+            <circle r="5" fill="var(--violet)">
+              <animateMotion
+                dur="3.2s"
+                begin="0.8s"
+                repeatCount="indefinite"
+                path="M240 98 L270 98"
+              />
+            </circle>
+            <circle r="5" fill="var(--accent-2)">
+              <animateMotion
+                dur="3.2s"
+                begin="1.6s"
+                repeatCount="indefinite"
+                path="M370 98 L400 98"
+              />
+            </circle>
+            <circle r="5" fill="var(--violet)">
+              <animateMotion
+                dur="3.2s"
+                begin="2.4s"
+                repeatCount="indefinite"
+                path="M500 98 L530 98"
+              />
+            </circle>
+            <rect
+              class="box"
+              x="120"
+              y="160"
+              width="400"
+              height="50"
+              rx="8"
+              stroke-dasharray="4 4"
+            />
+            <text class="t" x="320" y="182" text-anchor="middle">
+              connect-configs · connect-offsets · connect-status
+            </text>
+            <text class="tm" x="320" y="200" text-anchor="middle">
+              shared state that lets any worker take over a task
+            </text>
+            <text class="tm" x="20" y="40">
+              Converters (JSON, Avro, Protobuf) and single message transforms
+              (SMTs) run between the task and Kafka.
+            </text>
+          </svg>
+          <figcaption>
+            Source tasks write to Kafka and record their source offsets. Sink
+            tasks read from Kafka and commit their progress through a consumer
+            group.
+          </figcaption>
+        </figure>
+        <ul>
+          <li>
+            <strong>Errors</strong>: <code>errors.tolerance</code> decides
+            whether a bad record stops the task, and
+            <code>errors.deadletterqueue.topic.name</code> sends failed records
+            to a dead-letter topic.
+          </li>
+          <li>
+            <strong>Modes</strong>: distributed mode runs the cluster you
+            configure through the REST API. Standalone mode runs a single
+            worker, which suits development.
+          </li>
+        </ul>
+        <p class="src">
+          <strong>Sources:</strong>
+          <a href="https://kafka.apache.org/documentation/#connect" target="_blank"
+            >Docs: Kafka Connect</a
+          >
+          <em>not read</em>
+        </p>
+      </section>
+
+      <section class="topic" id="streams">
+        <h2>Kafka Streams internals</h2>
+        <p>
+          A Streams application builds a <strong>topology</strong> of processing
+          steps. Each source partition becomes a <strong>task</strong>, and
+          tasks run on <strong>stream threads</strong>. Operations that change
+          the key, such as <code>groupBy</code>, write to an internal
+          <strong>repartition topic</strong> so that all records for a key reach
+          the same task. Stateful operations keep their data in
+          <strong>state stores</strong>, usually RocksDB on local disk. Each
+          store is backed by a <strong>changelog topic</strong>, so a new
+          instance can rebuild the store from Kafka.
+        </p>
+        <figure>
+          <svg
+            viewBox="0 0 640 200"
+            role="img"
+            aria-label="Topology: source topic, filter, repartition on key, count into a state store, changelog topic backing the store"
+          >
+            <rect class="box-a" x="10" y="60" width="120" height="50" rx="8" />
+            <text class="tb" x="70" y="90" text-anchor="middle">orders</text>
+            <rect class="box-g" x="170" y="60" width="90" height="50" rx="8" />
+            <text class="t" x="215" y="90" text-anchor="middle">filter</text>
+            <rect class="box-w" x="300" y="60" width="150" height="50" rx="8" />
+            <text class="tb" x="375" y="84" text-anchor="middle">
+              groupBy key
+            </text>
+            <text class="tm" x="375" y="100" text-anchor="middle">
+              repartition topic
+            </text>
+            <rect class="box-v" x="490" y="60" width="140" height="50" rx="8" />
+            <text class="tb" x="560" y="84" text-anchor="middle">count</text>
+            <text class="tm" x="560" y="100" text-anchor="middle">
+              state store
+            </text>
+            <rect
+              class="box"
+              x="490"
+              y="140"
+              width="140"
+              height="44"
+              rx="8"
+              stroke-dasharray="4 4"
+            />
+            <text class="t" x="560" y="167" text-anchor="middle">
+              changelog topic
+            </text>
+            <path
+              class="ln-a flow"
+              marker-end="url(#m-a)"
+              d="M130 85 L170 85"
+            />
+            <path
+              class="ln-g flow"
+              marker-end="url(#m-g)"
+              d="M260 85 L300 85"
+            />
+            <path
+              class="ln-w flow"
+              marker-end="url(#m-w)"
+              d="M450 85 L490 85"
+            />
+            <path
+              class="ln-v flow"
+              marker-end="url(#m-v)"
+              d="M560 110 L560 140"
+            />
+            <circle r="5" fill="var(--accent)">
+              <animateMotion
+                dur="2.6s"
+                repeatCount="indefinite"
+                path="M130 85 L170 85"
+              />
+            </circle>
+            <circle r="5" fill="var(--warn)">
+              <animateMotion
+                dur="2.6s"
+                begin="1.3s"
+                repeatCount="indefinite"
+                path="M450 85 L490 85"
+              />
+            </circle>
+            <circle r="5" fill="var(--violet)">
+              <animateMotion
+                dur="2.6s"
+                begin="0.8s"
+                repeatCount="indefinite"
+                path="M560 110 L560 140"
+              />
+            </circle>
+            <text class="tm" x="20" y="150">
+              Repartition and changelog topics are created by the application.
+              Their names include the application ID.
+            </text>
+          </svg>
+          <figcaption>
+            Each key change adds a repartition step. Each state store writes its
+            changes to a changelog, which is the source of recovery.
+          </figcaption>
+        </figure>
+        <ul>
+          <li>
+            <strong>Standby replicas</strong>
+            (<code>num.standby.replicas</code>) keep warm copies of stores, so
+            failover takes less time to rebuild state.
+          </li>
+          <li>
+            <strong>Guarantees</strong>: <code>processing.guarantee</code> is
+            at-least-once by default. Set <code>exactly_once_v2</code> for
+            exactly-once processing inside the application.
+          </li>
+          <li>
+            <strong>Joins</strong> need the topics to be co-partitioned: same
+            key, same partition count. Otherwise the join is wrong or the
+            application refuses to start.
+          </li>
+          <li>
+            <strong>Windows</strong> (tumbling, hopping, sliding, session) use a
+            grace period for late records. Results inside the window can be
+            suppressed until it closes.
+          </li>
+        </ul>
+        <p class="src">
+          <strong>Sources:</strong>
+          <a href="https://kafka.apache.org/documentation/#streams" target="_blank"
+            >Docs: Kafka Streams</a
+          >
+          <em>not read</em>
+        </p>
+      </section>
+
+      <!-- ============ OPERATIONS ============ -->
+      <h2 class="group">Operations</h2>
+
+      <section class="topic" id="retention">
+        <h2>Retention, compaction and tiered storage</h2>
+        <p>
+          Two cleanup modes apply per topic. <strong>Delete</strong> removes
+          whole closed segments once they are older than
+          <code>retention.ms</code> or the partition exceeds
+          <code>retention.bytes</code>. <strong>Compact</strong> keeps the
+          newest record per key within closed segments, and removes a key
+          entirely when it receives a null-value tombstone. The active segment
+          is never deleted or compacted.
+        </p>
+        <p>
+          Compaction works in the background using a dirty ratio. It runs when
+          the share of uncompacted data crosses
+          <code>min.cleanable.dirty.ratio</code>, and it honours
+          <code>min.compaction.lag.ms</code> and
+          <code>max.compaction.lag.ms</code> so records are not compacted too
+          early or too late. Tombstones are kept for
+          <code>delete.retention.ms</code> so consumers can see the deletion.
+        </p>
+        <p>
+          <strong>Tiered storage</strong> (KIP-405) moves closed segments to
+          object storage. Local disks keep the recent data, and the cluster
+          keeps the full history at lower cost. Reads for old offsets fetch from
+          remote storage, which is slower. Relevant settings:
+          <code>remote.storage.enable</code>,
+          <code>local.retention.ms</code> and
+          <code>local.retention.bytes</code>.
+        </p>
+        <figure>
+          <svg
+            viewBox="0 0 640 210"
+            role="img"
+            aria-label="Closed segments copied to remote object storage; recent segments stay on the broker; consumers read recent data locally and old data remotely"
+          >
+            <rect class="box-a" x="30" y="50" width="220" height="80" rx="10" />
+            <text class="tb" x="140" y="76" text-anchor="middle">
+              Local tier (broker disk)
+            </text>
+            <text class="tm" x="140" y="96" text-anchor="middle">
+              recent, active segments
+            </text>
+            <text class="tm" x="140" y="114" text-anchor="middle">
+              fast reads
+            </text>
+            <rect
+              class="box-v"
+              x="390"
+              y="50"
+              width="220"
+              height="80"
+              rx="10"
+            />
+            <text class="tb" x="500" y="76" text-anchor="middle">
+              Remote tier (object storage)
+            </text>
+            <text class="tm" x="500" y="96" text-anchor="middle">
+              closed segments, full history
+            </text>
+            <text class="tm" x="500" y="114" text-anchor="middle">
+              cheaper, slower reads
+            </text>
+            <path
+              class="ln-v flow"
+              marker-end="url(#m-v)"
+              d="M250 90 L390 90"
+            />
+            <text class="tm" x="320" y="82" text-anchor="middle">
+              copy closed segments
+            </text>
+            <rect
+              class="box-g"
+              x="250"
+              y="160"
+              width="140"
+              height="36"
+              rx="8"
+            />
+            <text class="t" x="320" y="183" text-anchor="middle">Consumer</text>
+            <path
+              class="ln-a flow"
+              marker-end="url(#m-a)"
+              d="M140 130 L270 160"
+            />
+            <path
+              class="ln-w flow"
+              marker-end="url(#m-w)"
+              d="M500 130 L370 160"
+            />
+            <text class="tm" x="170" y="150">recent offsets</text>
+            <text class="tm" x="470" y="150">old offsets</text>
+            <circle r="5" fill="var(--violet)">
+              <animateMotion
+                dur="2.6s"
+                repeatCount="indefinite"
+                path="M250 90 L390 90"
+              />
+            </circle>
+            <circle r="5" fill="var(--accent)">
+              <animateMotion
+                dur="2.6s"
+                begin="1.3s"
+                repeatCount="indefinite"
+                path="M140 130 L270 160"
+              />
+            </circle>
+            <circle r="5" fill="var(--warn)">
+              <animateMotion
+                dur="2.6s"
+                begin="0.6s"
+                repeatCount="indefinite"
+                path="M500 130 L370 160"
+              />
+            </circle>
+          </svg>
+          <figcaption>
+            Tiered storage keeps history cheaply. Consumers that need recent
+            data are unaffected, and consumers that read far back accept the
+            extra latency.
+          </figcaption>
+        </figure>
+        <p class="src">
+          <strong>Sources:</strong>
+          <a href="https://kafka-options-explorer.conduktor.io/kip/405/" target="_blank"
+            >KIP-405</a
+          >
+          <em>checked</em> (third-party explorer page) ·
+          <a href="https://kafka.apache.org/documentation/#compaction" target="_blank"
+            >Docs: Log compaction</a
+          >
+          <em>not read</em>
+        </p>
+      </section>
+
+      <section class="topic" id="security">
+        <h2>Security and quotas</h2>
+        <ul>
+          <li>
+            <strong>Listeners</strong>: each listener has a protocol (PLAINTEXT,
+            SSL, SASL_PLAINTEXT, SASL_SSL). <code>advertised.listeners</code> is
+            what clients are told to connect to. A wrong advertised address is
+            one of the most common connection failures, because clients connect
+            to the bootstrap address and then to whatever the broker advertises.
+          </li>
+          <li>
+            <strong>Authentication</strong>: TLS for encryption and client
+            certificates, or SASL mechanisms (PLAIN, SCRAM, OAUTHBEARER,
+            GSSAPI/Kerberos).
+          </li>
+          <li>
+            <strong>Authorization</strong>: ACLs per resource (topic, group,
+            cluster, transactional ID) and operation (read, write, describe,
+            create). KRaft clusters use the StandardAuthorizer.
+          </li>
+          <li>
+            <strong>Quotas</strong>: limits on producer bytes per second,
+            consumer bytes per second and request-handler time, set per client
+            ID or user. They keep one noisy client from starving others.
+          </li>
+        </ul>
+        <p class="src">
+          <strong>Sources:</strong>
+          <a href="https://kafka.apache.org/documentation/#security" target="_blank"
+            >Docs: Security</a
+          >
+          <em>not read</em>
+        </p>
+      </section>
+
+      <section class="topic" id="metrics">
+        <h2>Metrics and failure playbook</h2>
+        <p>
+          The broker and client metrics below are the first things to check in
+          an incident. Exact metric names differ slightly across versions, so
+          look them up in the Monitoring section of the docs.
+        </p>
+        <table class="ref">
+          <tr>
+            <th>Signal</th>
+            <th>What it means</th>
+            <th>Usually points to</th>
+          </tr>
+          <tr>
+            <td>UnderReplicatedPartitions &gt; 0</td>
+            <td>Followers are behind or missing</td>
+            <td>
+              A broker down, slow disk, network, or a replica fetch throttled
+            </td>
+          </tr>
+          <tr>
+            <td>UnderMinIsrPartitionCount &gt; 0</td>
+            <td>ISR smaller than min.insync.replicas</td>
+            <td>Producers with acks=all are failing now</td>
+          </tr>
+          <tr>
+            <td>OfflinePartitionsCount &gt; 0</td>
+            <td>Partitions with no leader</td>
+            <td>No ISR replica available, with unclean election off</td>
+          </tr>
+          <tr>
+            <td>ActiveControllerCount</td>
+            <td>Should be exactly 1</td>
+            <td>Controller quorum issues or split configuration</td>
+          </tr>
+          <tr>
+            <td>RequestHandlerAvgIdlePercent low</td>
+            <td>Request threads are busy</td>
+            <td>Overloaded brokers, large requests, or too few I/O threads</td>
+          </tr>
+          <tr>
+            <td>Consumer records-lag-max rising</td>
+            <td>Consumers are falling behind</td>
+            <td>Slow processing, hot partitions, frequent rebalances</td>
+          </tr>
+          <tr>
+            <td>Frequent rebalances</td>
+            <td>Members are being removed</td>
+            <td>
+              max.poll.interval exceeded, GC pauses, short session timeout,
+              restarting pods
+            </td>
+          </tr>
+          <tr>
+            <td>Producer timeouts</td>
+            <td>Batches expire before acknowledgement</td>
+            <td>Broker overload, buffer full, min ISR not met</td>
+          </tr>
+          <tr>
+            <td>Duplicates downstream</td>
+            <td>At-least-once delivery working as designed</td>
+            <td>Consumer handler is not idempotent</td>
+          </tr>
+          <tr>
+            <td>Disk filling up</td>
+            <td>Retention or compaction not keeping pace</td>
+            <td>
+              Retention settings, a dead consumer holding data (compaction lag),
+              or skewed partitions
+            </td>
+          </tr>
+        </table>
+        <p class="src">
+          <strong>Sources:</strong>
+          <a href="https://kafka.apache.org/documentation/#monitoring" target="_blank"
+            >Docs: Monitoring</a
+          >
+          <em>not read</em>
+        </p>
+      </section>
+
+      <section class="topic" id="tools">
+        <h2>Command-line tools</h2>
+        <p>
+          These ship in the <code>bin/</code> directory of a Kafka release.
+          Script names can differ by distribution.
+        </p>
+        <ul>
+          <li>
+            <code>kafka-topics.sh</code>: create, describe and alter topics,
+            including partition counts and leaders.
+          </li>
+          <li>
+            <code>kafka-consumer-groups.sh --describe --group &lt;name&gt;</code
+            >: per-partition committed offsets, log end offsets and lag. First
+            stop for lag questions.
+          </li>
+          <li>
+            <code>kafka-configs.sh</code>: view and change topic, broker and
+            client configs without a restart where the config is dynamic.
+          </li>
+          <li>
+            <code>kafka-leader-election.sh</code>: trigger preferred leader
+            election after a broker returns.
+          </li>
+          <li>
+            <code>kafka-reassign-partitions.sh</code>: move partition replicas
+            between brokers. For continuous balancing, many teams use Cruise
+            Control.
+          </li>
+          <li>
+            <code>kafka-dump-log.sh</code>: decode segment files to inspect
+            batches, offsets, sequence numbers and timestamps.
+          </li>
+          <li>
+            <code>kafka-console-producer.sh</code> and
+            <code>kafka-console-consumer.sh</code>: quick tests, including
+            reading with <code>--from-beginning</code> or showing keys and
+            headers.
+          </li>
+          <li>
+            <code>kafka-metadata-shell.sh</code>: inspect KRaft metadata when
+            diagnosing controller state.
+          </li>
+        </ul>
+        <p class="src">
+          <strong>Sources:</strong>
+          <a href="https://kafka.apache.org/documentation/#quickstart" target="_blank"
+            >Docs: Quickstart and the bin/ tools</a
+          >
+          <em>not read</em>
+        </p>
+      </section>
+
+      <!-- ============ REFERENCE ============ -->
+      <h2 class="group">Reference</h2>
+
+      <section class="topic" id="configs">
+        <h2>Configuration reference</h2>
+        <p class="note">
+          The defaults here are from my knowledge of recent releases and were
+          not checked against the official tables. Confirm them for your version
+          before relying on them.
+        </p>
+
+        <h3 class="cap-title">Producer</h3>
+        <table class="ref">
+          <tr>
+            <th>Config</th>
+            <th>Default (verify)</th>
+            <th>What it controls</th>
+          </tr>
+          <tr>
+            <td>acks</td>
+            <td>all</td>
+            <td>How many replicas must confirm before success</td>
+          </tr>
+          <tr>
+            <td>enable.idempotence</td>
+            <td>true</td>
+            <td>Sequence-numbered batches; duplicate-free retries</td>
+          </tr>
+          <tr>
+            <td>max.in.flight.requests.per.connection</td>
+            <td>5</td>
+            <td>
+              Unacknowledged requests per connection; up to 5 keeps order with
+              idempotence
+            </td>
+          </tr>
+          <tr>
+            <td>retries</td>
+            <td>very large</td>
+            <td>Retries until delivery.timeout.ms expires</td>
+          </tr>
+          <tr>
+            <td>delivery.timeout.ms</td>
+            <td>120000</td>
+            <td>Total time from send() to success or failure</td>
+          </tr>
+          <tr>
+            <td>request.timeout.ms</td>
+            <td>30000</td>
+            <td>Timeout for a single request</td>
+          </tr>
+          <tr>
+            <td>linger.ms</td>
+            <td>0 (check; newer releases may differ)</td>
+            <td>How long to wait to fill a batch</td>
+          </tr>
+          <tr>
+            <td>batch.size</td>
+            <td>16384 bytes</td>
+            <td>Maximum batch size per partition</td>
+          </tr>
+          <tr>
+            <td>buffer.memory</td>
+            <td>33554432 bytes (32 MB)</td>
+            <td>Memory for unsent records; full buffer blocks send()</td>
+          </tr>
+          <tr>
+            <td>max.block.ms</td>
+            <td>60000</td>
+            <td>How long send() blocks when the buffer is full</td>
+          </tr>
+          <tr>
+            <td>compression.type</td>
+            <td>none</td>
+            <td>gzip, snappy, lz4 or zstd per batch</td>
+          </tr>
+          <tr>
+            <td>transactional.id</td>
+            <td>unset</td>
+            <td>Set to enable transactions and fencing</td>
+          </tr>
+        </table>
+
+        <h3 class="cap-title">Consumer</h3>
+        <table class="ref">
+          <tr>
+            <th>Config</th>
+            <th>Default (verify)</th>
+            <th>What it controls</th>
+          </tr>
+          <tr>
+            <td>group.id</td>
+            <td>required for groups</td>
+            <td>Group membership and committed offsets</td>
+          </tr>
+          <tr>
+            <td>group.instance.id</td>
+            <td>unset</td>
+            <td>Static membership; avoids rebalance on quick restarts</td>
+          </tr>
+          <tr>
+            <td>session.timeout.ms</td>
+            <td>45000</td>
+            <td>Heartbeat silence before the member is removed</td>
+          </tr>
+          <tr>
+            <td>heartbeat.interval.ms</td>
+            <td>3000</td>
+            <td>How often the heartbeat thread sends</td>
+          </tr>
+          <tr>
+            <td>max.poll.interval.ms</td>
+            <td>300000</td>
+            <td>Maximum gap between poll() calls before the member leaves</td>
+          </tr>
+          <tr>
+            <td>max.poll.records</td>
+            <td>500</td>
+            <td>Records returned per poll</td>
+          </tr>
+          <tr>
+            <td>enable.auto.commit</td>
+            <td>true</td>
+            <td>
+              Commits on a timer, which can commit before processing finishes
+            </td>
+          </tr>
+          <tr>
+            <td>auto.offset.reset</td>
+            <td>latest</td>
+            <td>Where to start when no committed offset exists</td>
+          </tr>
+          <tr>
+            <td>partition.assignment.strategy</td>
+            <td>RangeAssignor, CooperativeStickyAssignor (verify)</td>
+            <td>How partitions are shared among members</td>
+          </tr>
+          <tr>
+            <td>fetch.min.bytes</td>
+            <td>1</td>
+            <td>Minimum data before the broker answers a fetch</td>
+          </tr>
+          <tr>
+            <td>fetch.max.wait.ms</td>
+            <td>500</td>
+            <td>Longest wait for fetch.min.bytes to be reached</td>
+          </tr>
+          <tr>
+            <td>fetch.max.bytes</td>
+            <td>52428800 (50 MB)</td>
+            <td>Maximum data per fetch response</td>
+          </tr>
+          <tr>
+            <td>max.partition.fetch.bytes</td>
+            <td>1048576 (1 MB)</td>
+            <td>Maximum data per partition per fetch</td>
+          </tr>
+          <tr>
+            <td>isolation.level</td>
+            <td>read_uncommitted</td>
+            <td>read_committed hides aborted and open transactions</td>
+          </tr>
+        </table>
+
+        <h3 class="cap-title">Broker and topic</h3>
+        <table class="ref">
+          <tr>
+            <th>Config</th>
+            <th>Default (verify)</th>
+            <th>What it controls</th>
+          </tr>
+          <tr>
+            <td>default.replication.factor</td>
+            <td>1 (set to 3 in production)</td>
+            <td>Replicas for auto-created topics</td>
+          </tr>
+          <tr>
+            <td>min.insync.replicas</td>
+            <td>1</td>
+            <td>Minimum ISR size for acks=all writes</td>
+          </tr>
+          <tr>
+            <td>unclean.leader.election.enable</td>
+            <td>false</td>
+            <td>Allow an out-of-sync replica to lead (risks data loss)</td>
+          </tr>
+          <tr>
+            <td>replica.lag.time.max.ms</td>
+            <td>30000</td>
+            <td>How far behind a follower may be before it leaves the ISR</td>
+          </tr>
+          <tr>
+            <td>log.segment.bytes</td>
+            <td>1073741824 (1 GiB)</td>
+            <td>Size that triggers a segment roll</td>
+          </tr>
+          <tr>
+            <td>log.roll.hours</td>
+            <td>168</td>
+            <td>Age that triggers a segment roll</td>
+          </tr>
+          <tr>
+            <td>log.index.interval.bytes</td>
+            <td>4096</td>
+            <td>How often index entries are written</td>
+          </tr>
+          <tr>
+            <td>log.retention.hours</td>
+            <td>168 (7 days)</td>
+            <td>Age limit for delete cleanup</td>
+          </tr>
+          <tr>
+            <td>log.retention.bytes</td>
+            <td>-1 (no limit)</td>
+            <td>Size limit per partition for delete cleanup</td>
+          </tr>
+          <tr>
+            <td>log.cleanup.policy</td>
+            <td>delete</td>
+            <td>delete, compact, or both</td>
+          </tr>
+          <tr>
+            <td>min.cleanable.dirty.ratio</td>
+            <td>0.5</td>
+            <td>Share of uncompacted data before compaction runs</td>
+          </tr>
+          <tr>
+            <td>delete.retention.ms</td>
+            <td>86400000 (24 h)</td>
+            <td>How long tombstones are kept</td>
+          </tr>
+          <tr>
+            <td>offsets.topic.replication.factor</td>
+            <td>3</td>
+            <td>Replication of __consumer_offsets</td>
+          </tr>
+          <tr>
+            <td>transaction.state.log.min.isr</td>
+            <td>2</td>
+            <td>Minimum ISR for __transaction_state</td>
+          </tr>
+          <tr>
+            <td>remote.storage.enable</td>
+            <td>false</td>
+            <td>Enables tiered storage for the topic</td>
+          </tr>
+        </table>
+        <p class="src">
+          <strong>Sources:</strong>
+          <a href="https://kafka.apache.org/documentation/#configuration" target="_blank"
+            >Docs: Configuration</a
+          >
+          <em>not read</em> ·
+          <span class="unchecked">default values not verified</span>
+        </p>
+      </section>
+
+      <!-- ============ INTERVIEW ============ -->
+      <h2 class="group">Interview</h2>
+
+      <section class="topic" id="deep-questions">
+        <h2>Deep-dive interview questions</h2>
+        <p>
+          Each question below is a common follow-up to the basics. Answer in two
+          parts: what happens by default, and what changes when you tune for
+          something else.
+        </p>
+        <ul>
+          <li>
+            <strong
+              >What exactly is written to disk when a producer sends a
+              batch?</strong
+            >
+            The broker validates the batch, assigns offsets, updates the leader
+            epoch and producer state, appends to the active segment, and updates
+            the index. Flushing to disk is left to the OS by default, and
+            durability comes from replication, not fsync.
+          </li>
+          <li>
+            <strong
+              >Why can a consumer read a record that the leader just wrote but
+              has not yet been replicated?</strong
+            >
+            It cannot, by default. Consumers are capped at the high watermark,
+            so records become visible only after the ISR has them.
+          </li>
+          <li>
+            <strong>A broker crashes with acks=1. What can you lose?</strong>
+            Records the leader acknowledged but had not replicated. With
+            acks=all and min.insync.replicas=2, acknowledged records exist on at
+            least two replicas.
+          </li>
+          <li>
+            <strong
+              >Why does a restarted consumer sometimes reprocess a window of
+              records?</strong
+            >
+            Its last commit lags its processing. Use manual commits after
+            processing, make handlers idempotent, or commit inside a transaction
+            with the output.
+          </li>
+          <li>
+            <strong>Why would adding a consumer not speed up a group?</strong>
+            It is already at the partition ceiling, so the extra consumer sits
+            idle. Add partitions, with a plan for key remapping.
+          </li>
+          <li>
+            <strong>How does Kafka handle a very large message?</strong> Raise
+            message.max.bytes, max.request.size and the consumer fetch limits
+            together, and check the broker's replica fetch size. Large messages
+            are costly, so a common answer is to store the payload elsewhere and
+            send a reference.
+          </li>
+          <li>
+            <strong
+              >Why does an idempotent producer still need a sensible retry
+              budget?</strong
+            >
+            Idempotence removes duplicates, but a batch that keeps failing
+            blocks its partition until delivery.timeout.ms expires. A short
+            budget surfaces a real outage sooner.
+          </li>
+          <li>
+            <strong
+              >How would you move a partition to a new broker with minimal
+              impact?</strong
+            >
+            Use the reassignment tool or Cruise Control, throttle replication so
+            the move does not starve production traffic, and watch the
+            under-replicated count until the move finishes.
+          </li>
+        </ul>
+        <p class="src">
+          <strong>Sources:</strong> No single source. Answers draw on the
+          sections above.
+        </p>
+      </section>
+    </main>
+  </body>
+</html>

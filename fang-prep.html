@@ -1,0 +1,877 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>System Design Interview Prep</title>
+    <link rel="stylesheet" href="styles.css" />
+    <style>
+      table.ref {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 10px 0;
+        font-size: 0.95rem;
+      }
+      table.ref th,
+      table.ref td {
+        border: 1px solid var(--line);
+        padding: 8px 10px;
+        text-align: left;
+        vertical-align: top;
+      }
+      table.ref th {
+        background: var(--bg);
+      }
+      .note {
+        color: var(--muted);
+        font-size: 0.9rem;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Shared arrowhead definitions -->
+    <svg width="0" height="0" style="position: absolute" aria-hidden="true">
+      <defs>
+        <marker
+          id="m-m"
+          viewBox="0 0 10 10"
+          refX="9"
+          refY="5"
+          markerWidth="7"
+          markerHeight="7"
+          orient="auto"
+        >
+          <path d="M0,0 L10,5 L0,10 z" style="fill: var(--muted)" />
+        </marker>
+        <marker
+          id="m-a"
+          viewBox="0 0 10 10"
+          refX="9"
+          refY="5"
+          markerWidth="7"
+          markerHeight="7"
+          orient="auto"
+        >
+          <path d="M0,0 L10,5 L0,10 z" style="fill: var(--accent)" />
+        </marker>
+        <marker
+          id="m-g"
+          viewBox="0 0 10 10"
+          refX="9"
+          refY="5"
+          markerWidth="7"
+          markerHeight="7"
+          orient="auto"
+        >
+          <path d="M0,0 L10,5 L0,10 z" style="fill: var(--accent-2)" />
+        </marker>
+        <marker
+          id="m-w"
+          viewBox="0 0 10 10"
+          refX="9"
+          refY="5"
+          markerWidth="7"
+          markerHeight="7"
+          orient="auto"
+        >
+          <path d="M0,0 L10,5 L0,10 z" style="fill: var(--warn)" />
+        </marker>
+        <marker
+          id="m-v"
+          viewBox="0 0 10 10"
+          refX="9"
+          refY="5"
+          markerWidth="7"
+          markerHeight="7"
+          orient="auto"
+        >
+          <path d="M0,0 L10,5 L0,10 z" style="fill: var(--violet)" />
+        </marker>
+      </defs>
+    </svg>
+
+    <main>
+      <header>
+        <div class="part"><a href="/" class="back">&#8592; Back</a>Interview preparation</div>
+        <h1>System Design Interviews at Large Tech Companies</h1>
+        <p>
+          How to structure your answer, estimate scale, and discuss trade-offs.
+          Built on the system design and Kafka guides. This reflects common
+          practice, not any company's official process.
+        </p>
+      </header>
+
+      <nav class="toc">
+        <h2>Contents</h2>
+        <ol>
+          <li><a href="#scoring">What interviewers evaluate</a></li>
+          <li><a href="#timeline">A 45-minute plan</a></li>
+          <li><a href="#framework">The answer framework</a></li>
+          <li><a href="#estimation">Back-of-envelope estimation</a></li>
+          <li><a href="#worked">Worked example: activity feed</a></li>
+          <li><a href="#kafka-qa">Kafka questions to expect</a></li>
+          <li><a href="#tradeoffs">Trade-off talking points</a></li>
+          <li><a href="#mistakes">Common mistakes</a></li>
+          <li><a href="#practice">Practice questions</a></li>
+          <li><a href="#plan">Four-week study plan</a></li>
+        </ol>
+      </nav>
+
+      <h2 class="group">Approach</h2>
+
+      <section class="topic" id="scoring">
+        <h2>What interviewers evaluate</h2>
+        <p>
+          Interviewers are rarely checking whether you know a specific product.
+          They are looking for how you reason. Most rubrics cover these areas:
+        </p>
+        <ul>
+          <li>
+            <strong>Requirements</strong>: do you ask clarifying questions and
+            separate functional needs from non-functional ones such as latency,
+            availability and durability?
+          </li>
+          <li>
+            <strong>Scale</strong>: do you estimate load and storage before
+            designing, and use those numbers to justify choices?
+          </li>
+          <li>
+            <strong>Design</strong>: is the architecture clear, with sensible
+            components and data flows?
+          </li>
+          <li>
+            <strong>Trade-offs</strong>: do you name what each choice costs, and
+            when you would choose differently?
+          </li>
+          <li>
+            <strong>Depth</strong>: can you go deep on one or two parts, such as
+            partitioning, caching or failure handling?
+          </li>
+          <li>
+            <strong>Communication</strong>: do you narrate your thinking, check
+            in with the interviewer and adjust when they push back?
+          </li>
+        </ul>
+        <p class="note">
+          A good answer with clear reasoning and honest trade-offs often beats a
+          fancy design with no justification.
+        </p>
+      </section>
+
+      <section class="topic" id="timeline">
+        <h2>A 45-minute plan</h2>
+        <p>
+          Time is the main constraint. A rough split that keeps you from
+          spending too long on any one part:
+        </p>
+        <figure>
+          <svg
+            viewBox="0 0 640 150"
+            role="img"
+            aria-label="Time split across a 45 minute design interview"
+          >
+            <rect class="box-a" x="20" y="40" width="80" height="50" rx="4" />
+            <text class="t" x="60" y="62" text-anchor="middle">
+              Requirements
+            </text>
+            <text class="tm" x="60" y="78" text-anchor="middle">5 min</text>
+            <rect class="box-a" x="100" y="40" width="60" height="50" rx="4" />
+            <text class="t" x="130" y="62" text-anchor="middle">Scale</text>
+            <text class="tm" x="130" y="78" text-anchor="middle">5 min</text>
+            <rect class="box-g" x="160" y="40" width="70" height="50" rx="4" />
+            <text class="t" x="195" y="62" text-anchor="middle">
+              API &amp; data
+            </text>
+            <text class="tm" x="195" y="78" text-anchor="middle">5 min</text>
+            <rect class="box-g" x="230" y="40" width="140" height="50" rx="4" />
+            <text class="t" x="300" y="62" text-anchor="middle">
+              High-level design
+            </text>
+            <text class="tm" x="300" y="78" text-anchor="middle">10 min</text>
+            <rect class="box-w" x="370" y="40" width="200" height="50" rx="4" />
+            <text class="t" x="470" y="62" text-anchor="middle">Deep dive</text>
+            <text class="tm" x="470" y="78" text-anchor="middle">15 min</text>
+            <rect class="box-v" x="570" y="40" width="50" height="50" rx="4" />
+            <text class="t" x="595" y="62" text-anchor="middle">Wrap</text>
+            <text class="tm" x="595" y="78" text-anchor="middle">5 min</text>
+            <path
+              class="ln-a flow"
+              marker-end="url(#m-a)"
+              d="M20 110 L620 110"
+            />
+            <text class="tm" x="20" y="130">time →</text>
+          </svg>
+          <figcaption>
+            Spend the most time on the deep dive, where your depth is judged.
+            Keep requirements and estimation short.
+          </figcaption>
+        </figure>
+      </section>
+
+      <h2 class="group">Method</h2>
+
+      <section class="topic" id="framework">
+        <h2>The answer framework</h2>
+        <p>
+          A repeatable order keeps you from jumping straight into boxes and
+          arrows:
+        </p>
+        <ol>
+          <li>
+            <strong>Clarify requirements</strong>: who uses it, which features
+            matter most, what scale, what latency and availability targets.
+          </li>
+          <li>
+            <strong>Estimate</strong>: requests per second, storage and
+            bandwidth, with peak factors.
+          </li>
+          <li>
+            <strong>Define the interface</strong>: the main APIs, their inputs
+            and outputs.
+          </li>
+          <li>
+            <strong>Model the data</strong>: entities, access patterns, and
+            whether the store should be relational or key-value.
+          </li>
+          <li>
+            <strong>Draw the high-level design</strong>: the main components and
+            the data flow between them.
+          </li>
+          <li>
+            <strong>Deep dive</strong>: the hardest part of the problem, such as
+            partitioning, hot keys, caching or consistency.
+          </li>
+          <li>
+            <strong>Address bottlenecks and failures</strong>: what breaks
+            first, what happens when a node or region fails, and how you
+            recover.
+          </li>
+        </ol>
+        <figure>
+          <svg
+            viewBox="0 0 640 200"
+            role="img"
+            aria-label="Seven steps flow from requirements to bottlenecks"
+          >
+            <rect class="box-a" x="10" y="20" width="110" height="46" rx="6" />
+            <text class="t" x="65" y="40" text-anchor="middle">
+              1 Requirements
+            </text>
+            <rect class="box-a" x="150" y="20" width="110" height="46" rx="6" />
+            <text class="t" x="205" y="40" text-anchor="middle">
+              2 Estimate
+            </text>
+            <rect class="box-g" x="290" y="20" width="110" height="46" rx="6" />
+            <text class="t" x="345" y="40" text-anchor="middle">3 APIs</text>
+            <rect class="box-g" x="430" y="20" width="110" height="46" rx="6" />
+            <text class="t" x="485" y="40" text-anchor="middle">
+              4 Data model
+            </text>
+            <rect class="box-w" x="90" y="120" width="110" height="46" rx="6" />
+            <text class="t" x="145" y="140" text-anchor="middle">
+              5 High-level
+            </text>
+            <rect
+              class="box-w"
+              x="250"
+              y="120"
+              width="110"
+              height="46"
+              rx="6"
+            />
+            <text class="t" x="305" y="140" text-anchor="middle">
+              6 Deep dive
+            </text>
+            <rect
+              class="box-v"
+              x="410"
+              y="120"
+              width="130"
+              height="46"
+              rx="6"
+            />
+            <text class="t" x="475" y="140" text-anchor="middle">
+              7 Bottlenecks
+            </text>
+            <path
+              class="ln-a flow"
+              marker-end="url(#m-a)"
+              d="M120 43 L150 43"
+            />
+            <path
+              class="ln-a flow"
+              marker-end="url(#m-a)"
+              d="M260 43 L290 43"
+            />
+            <path
+              class="ln-a flow"
+              marker-end="url(#m-a)"
+              d="M400 43 L430 43"
+            />
+            <path
+              class="ln-g flow"
+              marker-end="url(#m-g)"
+              d="M485 66 L145 120"
+            />
+            <path
+              class="ln-w flow"
+              marker-end="url(#m-w)"
+              d="M200 143 L250 143"
+            />
+            <path
+              class="ln-v flow"
+              marker-end="url(#m-v)"
+              d="M360 143 L410 143"
+            />
+            <circle r="5" fill="var(--accent)">
+              <animateMotion
+                dur="2.6s"
+                repeatCount="indefinite"
+                path="M120 43 L150 43"
+              />
+            </circle>
+            <circle r="5" fill="var(--warn)">
+              <animateMotion
+                dur="2.6s"
+                begin="1.3s"
+                repeatCount="indefinite"
+                path="M200 143 L250 143"
+              />
+            </circle>
+          </svg>
+          <figcaption>
+            Requirements and estimates come first. The design follows from them,
+            not the other way round.
+          </figcaption>
+        </figure>
+      </section>
+
+      <section class="topic" id="estimation">
+        <h2>Back-of-envelope estimation</h2>
+        <p>
+          Estimates do not need to be exact. They need to be the right order of
+          magnitude, and they should drive a design choice. Useful constants:
+        </p>
+        <table class="ref">
+          <tr>
+            <th>Quantity</th>
+            <th>Working value</th>
+          </tr>
+          <tr>
+            <td>Seconds in a day</td>
+            <td>about 86,400 (round to 10^5 for quick math)</td>
+          </tr>
+          <tr>
+            <td>Average QPS</td>
+            <td>daily requests ÷ 86,400</td>
+          </tr>
+          <tr>
+            <td>Peak QPS</td>
+            <td>
+              about 2 to 3 times the average, unless the prompt says otherwise
+            </td>
+          </tr>
+          <tr>
+            <td>Text record</td>
+            <td>about 1 KB for a typical row</td>
+          </tr>
+          <tr>
+            <td>Image or thumbnail</td>
+            <td>
+              tens to hundreds of KB; full-size photos are often several MB
+            </td>
+          </tr>
+          <tr>
+            <td>Storage growth</td>
+            <td>
+              records per day × record size × retention days × replication
+              factor
+            </td>
+          </tr>
+        </table>
+        <figure>
+          <svg
+            viewBox="0 0 640 210"
+            role="img"
+            aria-label="Funnel from daily active users to requests per second"
+          >
+            <rect class="box-a" x="60" y="10" width="520" height="36" rx="6" />
+            <text class="t" x="320" y="33" text-anchor="middle">
+              100M daily active users
+            </text>
+            <rect class="box-a" x="110" y="58" width="420" height="36" rx="6" />
+            <text class="t" x="320" y="81" text-anchor="middle">
+              × 10 feed loads per day = 1B requests/day
+            </text>
+            <rect
+              class="box-g"
+              x="160"
+              y="106"
+              width="320"
+              height="36"
+              rx="6"
+            />
+            <text class="t" x="320" y="129" text-anchor="middle">
+              ÷ 86,400 ≈ 11,600 requests/s average
+            </text>
+            <rect
+              class="box-w"
+              x="210"
+              y="154"
+              width="220"
+              height="36"
+              rx="6"
+            />
+            <text class="t" x="320" y="177" text-anchor="middle">
+              × 3 peak ≈ 35,000 requests/s
+            </text>
+            <path
+              class="ln-a flow"
+              marker-end="url(#m-a)"
+              d="M320 46 L320 58"
+            />
+            <path
+              class="ln-a flow"
+              marker-end="url(#m-a)"
+              d="M320 94 L320 106"
+            />
+            <path
+              class="ln-g flow"
+              marker-end="url(#m-g)"
+              d="M320 142 L320 154"
+            />
+            <circle r="5" fill="var(--warn)">
+              <animateMotion
+                dur="2.6s"
+                repeatCount="indefinite"
+                path="M320 46 L320 58"
+              />
+            </circle>
+          </svg>
+          <figcaption>
+            Each step turns a business number into a load number. The peak
+            number is what the design must survive.
+          </figcaption>
+        </figure>
+      </section>
+
+      <h2 class="group">Worked example</h2>
+
+      <section class="topic" id="worked">
+        <h2>Worked example: activity feed</h2>
+        <p>
+          <strong>Prompt</strong>: design a feed where users see posts from
+          people they follow.
+        </p>
+        <p>
+          <strong>Estimates used</strong> (state your own assumptions in the
+          interview): 100M daily users, 2 posts per user per day, average 200
+          followers per user. That gives about 2,300 post writes/s on average
+          and roughly 7,000/s at peak.
+        </p>
+        <p>
+          <strong>Key decision: fan-out.</strong> There are two ways to build a
+          feed:
+        </p>
+        <ul>
+          <li>
+            <strong>Fan-out on write</strong>: when a user posts, copy the post
+            into each follower's feed. Reads are fast, but writes are expensive,
+            and a celebrity with millions of followers makes a single post
+            extremely costly.
+          </li>
+          <li>
+            <strong>Fan-out on read</strong>: assemble the feed when it is
+            requested, by reading recent posts from everyone the user follows.
+            Writes are cheap, but reads are slower.
+          </li>
+        </ul>
+        <p>
+          A common answer is a <strong>hybrid</strong>: fan out on write for
+          ordinary accounts, and merge posts from high-follower accounts at read
+          time. Kafka fits as the event backbone: posts are published to a
+          topic, and fan-out workers consume it.
+        </p>
+        <figure>
+          <svg
+            viewBox="0 0 640 260"
+            role="img"
+            aria-label="Posts are published to Kafka; fan-out workers copy them into follower feeds; reads come from a feed cache"
+          >
+            <rect class="box-a" x="20" y="100" width="110" height="50" rx="8" />
+            <text class="tb" x="75" y="130" text-anchor="middle">
+              Post service
+            </text>
+            <rect
+              class="box-v"
+              x="180"
+              y="20"
+              width="190"
+              height="180"
+              rx="10"
+              stroke-dasharray="4 4"
+            />
+            <text class="tb" x="275" y="44" text-anchor="middle">
+              Kafka: posts topic
+            </text>
+            <rect class="box" x="200" y="60" width="150" height="30" rx="5" />
+            <text class="t" x="275" y="80" text-anchor="middle">
+              partition by author
+            </text>
+            <rect
+              class="box-g"
+              x="200"
+              y="150"
+              width="150"
+              height="34"
+              rx="6"
+            />
+            <text class="t" x="275" y="172" text-anchor="middle">
+              Fan-out workers
+            </text>
+            <rect class="box-w" x="430" y="20" width="190" height="60" rx="8" />
+            <text class="t" x="525" y="46" text-anchor="middle">
+              Follower feed store
+            </text>
+            <text class="tm" x="525" y="64" text-anchor="middle">
+              one list per user
+            </text>
+            <rect
+              class="box-a"
+              x="430"
+              y="110"
+              width="190"
+              height="50"
+              rx="8"
+            />
+            <text class="t" x="525" y="132" text-anchor="middle">
+              Feed cache
+            </text>
+            <text class="tm" x="525" y="148" text-anchor="middle">
+              hot feeds in memory
+            </text>
+            <rect class="box" x="430" y="190" width="190" height="40" rx="8" />
+            <text class="t" x="525" y="214" text-anchor="middle">
+              Reader: feed service
+            </text>
+            <path
+              class="ln-a flow"
+              marker-end="url(#m-a)"
+              d="M130 125 L180 125"
+            />
+            <path
+              class="ln-v flow"
+              marker-end="url(#m-v)"
+              d="M275 90 L275 150"
+            />
+            <path
+              class="ln-g flow"
+              marker-end="url(#m-g)"
+              d="M350 167 L430 50"
+            />
+            <path
+              class="ln-w flow"
+              marker-end="url(#m-w)"
+              d="M525 110 L525 80"
+            />
+            <path
+              class="ln-a flow"
+              marker-end="url(#m-a)"
+              d="M525 190 L525 160"
+            />
+            <circle r="5" fill="var(--accent)">
+              <animateMotion
+                dur="2.6s"
+                repeatCount="indefinite"
+                path="M130 125 L180 125"
+              />
+            </circle>
+            <circle r="5" fill="var(--accent-2)">
+              <animateMotion
+                dur="2.6s"
+                begin="1.3s"
+                repeatCount="indefinite"
+                path="M350 167 L430 50"
+              />
+            </circle>
+          </svg>
+          <figcaption>
+            Writes flow through Kafka into fan-out workers. Reads come from a
+            precomputed feed, so the feed request stays fast.
+          </figcaption>
+        </figure>
+        <p><strong>Talking points interviewers often probe:</strong></p>
+        <ul>
+          <li>
+            <strong>Partition key</strong>: partitioning posts by author keeps
+            each author's posts in order. Ask yourself whether ordering across
+            authors matters for the feed.
+          </li>
+          <li>
+            <strong>Hot partitions</strong>: a celebrity account concentrates
+            traffic on one partition. Mitigate with the hybrid model, or with
+            extra sub-keys for the hottest accounts.
+          </li>
+          <li>
+            <strong>Duplicates</strong>: consumers use at-least-once delivery,
+            so feed inserts must be idempotent. Key each feed entry by post ID
+            so a retry does not add it twice.
+          </li>
+          <li>
+            <strong>Consistency</strong>: a post can appear in feeds a few
+            seconds late. Say that is acceptable, which means choosing
+            availability over strict consistency for feeds, as in the CAP
+            section of the system design guide.
+          </li>
+          <li>
+            <strong>Failures</strong>: if fan-out workers fall behind, consumer
+            lag grows. Scale workers up to the partition count, and alert on
+            lag.
+          </li>
+          <li>
+            <strong>Storage</strong>: estimate the feed store by feeds × entries
+            per feed × entry size, and cap each feed at a fixed number of recent
+            posts.
+          </li>
+        </ul>
+      </section>
+
+      <h2 class="group">Kafka and trade-offs</h2>
+
+      <section class="topic" id="kafka-qa">
+        <h2>Kafka questions to expect</h2>
+        <p>
+          These come up often. Use the Kafka guide for the underlying details.
+          Strong answers state the trade-off in one line and then explain it.
+        </p>
+        <ul>
+          <li>
+            <strong>Why Kafka instead of a traditional queue?</strong> Kafka
+            keeps events in a replayable log, so many independent consumers can
+            read the same data, and a new consumer can replay from the
+            beginning. Traditional queues usually delete a message once it is
+            consumed.
+          </li>
+          <li>
+            <strong>How do you choose a partition key?</strong> Pick a key that
+            you need ordering for and that spreads traffic evenly. A key with
+            very few values, or a very busy value, creates hot partitions.
+          </li>
+          <li>
+            <strong>How do you get ordering?</strong> Ordering holds only within
+            a partition. Send related events to the same partition with the same
+            key. Cross-key ordering needs a different design, or it may not be
+            needed.
+          </li>
+          <li>
+            <strong>How do you avoid losing data?</strong> Use
+            <code>acks=all</code>, a replication factor of 3, a suitable
+            <code>min.insync.replicas</code>, and idempotent producers. Describe
+            what happens if a broker fails during a write.
+          </li>
+          <li>
+            <strong>What are the delivery guarantees?</strong> At-most-once,
+            at-least-once and exactly-once. Explain which you need and what it
+            costs. Be clear that exactly-once applies within Kafka, and that
+            external side effects still need idempotent handling.
+          </li>
+          <li>
+            <strong>How do you scale consumers?</strong> Add consumers up to the
+            partition count. More partitions add parallelism but cost more
+            broker resources, and changing the count can move keys to new
+            partitions.
+          </li>
+          <li>
+            <strong>What does consumer lag tell you?</strong> How far a group is
+            behind the end of the log. Rising lag means the consumers cannot
+            keep up. Investigate processing speed, hot keys and rebalances.
+          </li>
+          <li>
+            <strong>What happens during a rebalance?</strong> Partitions move
+            between consumers, so processing pauses for those partitions.
+            Cooperative rebalancing reduces the pause. Keep processing fast so
+            you stay inside the poll interval.
+          </li>
+        </ul>
+      </section>
+
+      <section class="topic" id="tradeoffs">
+        <h2>Trade-off talking points</h2>
+        <p>
+          Interviewers want to hear the cost of each choice. Use this as a
+          starting point:
+        </p>
+        <table class="ref">
+          <tr>
+            <th>Decision</th>
+            <th>Option A</th>
+            <th>Option B</th>
+            <th>When to pick which</th>
+          </tr>
+          <tr>
+            <td>Consistency</td>
+            <td>Strong: writes wait for agreement</td>
+            <td>Eventual: replicas catch up later</td>
+            <td>
+              Strong for payments and inventory; eventual for feeds and counters
+            </td>
+          </tr>
+          <tr>
+            <td>Communication</td>
+            <td>Synchronous request-response</td>
+            <td>Asynchronous via a queue or log</td>
+            <td>
+              Sync when the caller needs the answer now; async to absorb spikes
+              or decouple
+            </td>
+          </tr>
+          <tr>
+            <td>Data store</td>
+            <td>Relational: joins, transactions</td>
+            <td>Key-value or wide-column: scale, simple access</td>
+            <td>
+              Relational when the access pattern is varied; key-value when it is
+              known and high volume
+            </td>
+          </tr>
+          <tr>
+            <td>Scaling</td>
+            <td>Vertical: bigger machine</td>
+            <td>Horizontal: more machines, sharding</td>
+            <td>
+              Vertical first for simplicity; horizontal once the ceiling is near
+              or availability matters
+            </td>
+          </tr>
+          <tr>
+            <td>Caching</td>
+            <td>Cache-aside: read through the app</td>
+            <td>Write-through: write to cache and store</td>
+            <td>
+              Cache-aside for read-heavy data; write-through when reads must see
+              recent writes
+            </td>
+          </tr>
+          <tr>
+            <td>Feed building</td>
+            <td>Fan-out on write</td>
+            <td>Fan-out on read</td>
+            <td>
+              Write for normal accounts; read for very large follower counts
+              (hybrid)
+            </td>
+          </tr>
+        </table>
+      </section>
+
+      <section class="topic" id="mistakes">
+        <h2>Common mistakes</h2>
+        <ul>
+          <li>
+            <strong>Drawing boxes first.</strong> Without requirements and
+            numbers, the design has no basis, and the interviewer cannot judge
+            it.
+          </li>
+          <li>
+            <strong>Skipping estimates.</strong> Scale changes the answer. A
+            system for 1,000 users and one for 1 billion are very different.
+          </li>
+          <li>
+            <strong>Naming technologies without reasons.</strong> "We use Kafka"
+            says little. "We use Kafka because we need a replayable log that
+            several consumers read" shows understanding.
+          </li>
+          <li>
+            <strong>Ignoring failure.</strong> Explain what happens when a node,
+            a broker, a region or a dependency fails.
+          </li>
+          <li>
+            <strong>Hiding trade-offs.</strong> Every choice has a cost. Naming
+            it is a strength.
+          </li>
+          <li>
+            <strong>Over-engineering.</strong> Start simple, then add complexity
+            where the numbers demand it.
+          </li>
+          <li>
+            <strong>Going silent.</strong> Think out loud, ask questions, and
+            accept hints without getting defensive.
+          </li>
+        </ul>
+      </section>
+
+      <h2 class="group">Practice</h2>
+
+      <section class="topic" id="practice">
+        <h2>Practice questions</h2>
+        <p>
+          These are representative prompts for practice, not a list from any
+          company. For each one, work through the framework above and time
+          yourself.
+        </p>
+        <ul>
+          <li>
+            Design a URL shortener. (Key generation, read-heavy caching, storage
+            estimate.)
+          </li>
+          <li>
+            Design a rate limiter for an API. (Token bucket, distributed
+            counters, sharding.)
+          </li>
+          <li>
+            Design a chat messaging system. (Connection handling, ordering,
+            delivery receipts, storage.)
+          </li>
+          <li>
+            Design a video streaming service. (CDN, transcoding pipeline, upload
+            flow.)
+          </li>
+          <li>
+            Design a distributed job scheduler. (Queues, retries, exactly-once
+            concerns, leader election.)
+          </li>
+          <li>
+            Design an analytics pipeline for click events. (Kafka ingestion,
+            partitioning, stream processing, batch storage.)
+          </li>
+          <li>
+            Design a search autocomplete system. (Trie or prefix index, caching,
+            freshness vs cost.)
+          </li>
+          <li>
+            Design a ride-matching service. (Geospatial indexing, sharding by
+            region, real-time updates.)
+          </li>
+        </ul>
+      </section>
+
+      <section class="topic" id="plan">
+        <h2>Four-week study plan</h2>
+        <ul>
+          <li>
+            <strong>Week 1</strong>: framework and estimation. Practice the
+            constants until they feel automatic. Do two short designs.
+          </li>
+          <li>
+            <strong>Week 2</strong>: core building blocks. Caching, load
+            balancing, replication, sharding, queues. Use the system design
+            guide as a reference.
+          </li>
+          <li>
+            <strong>Week 3</strong>: Kafka and streaming. Use the Kafka guide
+            and the questions above. Practice explaining partitioning and
+            delivery guarantees out loud.
+          </li>
+          <li>
+            <strong>Week 4</strong>: full mock interviews. Time each one to 45
+            minutes, then review the recording or your notes for weak areas.
+          </li>
+        </ul>
+        <p class="note">
+          Practise aloud. Interviews test how you explain your reasoning, and
+          silent study does not build that skill.
+        </p>
+      </section>
+    </main>
+  </body>
+</html>

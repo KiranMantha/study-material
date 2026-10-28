@@ -1,44 +1,99 @@
 <!doctype html>
 <html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Pages Index</title>
-<link rel="stylesheet" href="styles.css">
-<style>
-  ul.pages { list-style: none; padding: 0; margin: 0; display: grid; gap: 14px; }
-  ul.pages li a {
-    display: block;
-    background: var(--card);
-    border: 1px solid var(--line);
-    border-radius: 12px;
-    padding: 18px 20px;
-    color: inherit;
-    text-decoration: none;
-    transition: border-color .15s;
-  }
-  ul.pages li a:hover, ul.pages li a:focus-visible { border-color: var(--accent); outline: none; }
-  ul.pages .title { display: block; font-size: 1.1rem; font-weight: 600; color: var(--accent); }
-  ul.pages .desc { display: block; color: var(--muted); font-size: 0.95rem; margin-top: 4px; }
-  .intro { color: var(--muted); margin: 0 0 28px; }
-</style>
-</head>
-<body>
-<main>
-  <h1>Pages</h1>
-  <p class="intro">Choose a page to open it.</p>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Pages Index</title>
+    <link rel="stylesheet" href="styles.css" />
+    <style>
+      ul.pages {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+        display: grid;
+        gap: 14px;
+      }
+      ul.pages li a {
+        display: block;
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 18px 20px;
+        color: inherit;
+        text-decoration: none;
+        transition: border-color 0.15s;
+      }
+      ul.pages li a:hover,
+      ul.pages li a:focus-visible {
+        border-color: var(--accent);
+        outline: none;
+      }
+      ul.pages .title {
+        display: block;
+        font-size: 1.1rem;
+        font-weight: 600;
+        color: var(--accent);
+      }
+      ul.pages .desc {
+        display: block;
+        color: var(--muted);
+        font-size: 0.95rem;
+        margin-top: 4px;
+      }
+      .intro {
+        color: var(--muted);
+        margin: 0 0 28px;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Pages</h1>
+      <ul class="pages">
+        <!-- Add one <li> per page. Link with the file name, relative to this index. -->
+        <li>
+          <a href="system-design-guide.html">
+            <span class="title">System Design: Visual Guide</span>
+            <span class="desc"
+              >Patterns, examples and tools, each with an animated diagram and a
+              CAP view for the four examples.</span
+            >
+          </a>
+        </li>
+        <li>
+          <a href="kafka-guide.html">
+            <span class="title">Apache Kafka: Visual Guide</span>
+            <span class="desc"
+              >Topics, partitions, replication, consumer groups, delivery
+              guarantees, retention, rebalancing, KRaft, Connect and
+              Streams.</span
+            >
+          </a>
+        </li>
+        <li>
+          <a href="fang-interview-prep.html">
+            <span class="title">System Design Interview Prep</span>
+            <span class="desc"
+              >How interviews are scored, a 45-minute plan, an answer framework,
+              estimation, a worked feed example, Kafka questions, and practice
+              prompts.</span
+            >
+          </a>
+        </li>
+        <li>
+          <a href="kafka-internals-guide.html">
+            <span class="title">Apache Kafka: Internals and Configuration</span>
+            <span class="desc"
+              >Segments and indexes, batches, the producer pipeline,
+              idempotence, replication and epochs, elections, KRaft, consumer
+              groups, rebalancing, transactions, Connect, Streams, tiered
+              storage, metrics and config reference.</span
+            >
+          </a>
+        </li>
+      </ul>
 
-  <ul class="pages">
-    <!-- Add one <li> per page. Link with the file name, relative to this index. -->
-    <li>
-      <a href="system-design-guide.html">
-        <span class="title">System Design: Visual Guide</span>
-        <span class="desc">Patterns, examples and tools, each with an animated diagram and a CAP view for the four examples.</span>
-      </a>
-    </li>
-  </ul>
-
-  <footer>Last updated 2026-10-27.</footer>
-</main>
-</body>
+      <footer>Last updated 2026-10-27.</footer>
+    </main>
+  </body>
 </html>

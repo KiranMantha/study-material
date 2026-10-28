@@ -38,27 +38,349 @@
   --violet: #a594ff;
 }
 
-* { box-sizing: border-box; }
+* {
+  box-sizing: border-box;
+}
 
 body {
   margin: 0;
   background: var(--bg);
   color: var(--ink);
-  font: 16px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font:
+    16px/1.6 system-ui,
+    -apple-system,
+    "Segoe UI",
+    Roboto,
+    sans-serif;
 }
 
-main { max-width: 860px; margin: 0 auto; padding: 32px 18px 80px; }
+main {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 32px 18px 80px;
+}
 
-a { color: var(--accent); }
+a {
+  color: var(--accent);
+}
 
-header h1 { font-size: 2.1rem; margin: 0 0 6px; }
-header p { color: var(--muted); margin: 0; }
+header h1 {
+  font-size: 2.1rem;
+  margin: 0 0 6px;
+}
+header p {
+  color: var(--muted);
+  margin: 0;
+}
 
 .part {
   color: var(--muted);
   font-size: 0.85rem;
   text-transform: uppercase;
-  letter-spacing: .08em;
+  letter-spacing: 0.08em;
 }
 
-footer { margin-top: 40px; color: var(--muted); font-size: 0.85rem; }
+footer {
+  margin-top: 40px;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+/* Interview-perspective callouts */
+.fang {
+  background: var(--bg);
+  border-left: 4px solid var(--accent);
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin: 14px 0 4px;
+  font-size: 0.95rem;
+}
+.fang strong {
+  color: var(--accent);
+}
+.fang ul {
+  margin: 6px 0 0;
+  padding-left: 20px;
+}
+
+/* Table of contents */
+nav.toc {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 16px 20px;
+  margin: 24px 0 8px;
+}
+nav.toc h2 {
+  font-size: 1rem;
+  margin: 0 0 8px;
+}
+nav.toc ol {
+  margin: 0;
+  padding-left: 20px;
+  columns: 2;
+}
+nav.toc a {
+  color: var(--accent);
+  text-decoration: none;
+}
+nav.toc a:hover {
+  text-decoration: underline;
+}
+@media (max-width: 600px) {
+  nav.toc ol {
+    columns: 1;
+  }
+}
+
+.group {
+  margin: 40px 0 0;
+  font-size: 1.2rem;
+  color: var(--muted);
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 6px;
+}
+
+/* Sections */
+section.topic {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 22px 22px 18px;
+  margin: 22px 0;
+}
+section.topic h2 {
+  margin: 0 0 4px;
+  font-size: 1.4rem;
+}
+section.topic h3 {
+  margin: 18px 0 6px;
+  font-size: 1.05rem;
+}
+section.topic p {
+  margin: 8px 0;
+}
+section.topic ul,
+section.topic ol {
+  padding-left: 20px;
+  margin: 8px 0;
+}
+
+figure {
+  margin: 14px 0 6px;
+}
+figure svg {
+  width: 100%;
+  height: auto;
+  display: block;
+  overflow: visible;
+}
+figcaption {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+/* CAP view blocks */
+.cap-title {
+  margin: 18px 0 8px;
+  font-size: 1.05rem;
+}
+.cap-row {
+  display: flex;
+  gap: 18px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+.cap-row svg {
+  width: 240px;
+  flex: 0 0 240px;
+  height: auto;
+}
+.cap-text {
+  flex: 1 1 320px;
+}
+.cap-text ul {
+  margin-top: 4px;
+}
+.cap-text .pick {
+  color: var(--accent-2);
+  font-weight: 600;
+}
+.cap-text .skip {
+  color: var(--warn);
+  font-weight: 600;
+}
+
+/* SVG text and shapes */
+.t {
+  fill: var(--ink);
+  font:
+    13px system-ui,
+    sans-serif;
+}
+.tm {
+  fill: var(--muted);
+  font:
+    12px system-ui,
+    sans-serif;
+}
+.tb {
+  fill: var(--ink);
+  font:
+    600 13px system-ui,
+    sans-serif;
+}
+.box {
+  fill: var(--card);
+  stroke: var(--ink);
+  stroke-width: 1.5;
+}
+.box-a {
+  fill: var(--accent);
+  fill-opacity: 0.14;
+  stroke: var(--accent);
+  stroke-width: 1.5;
+}
+.box-g {
+  fill: var(--accent-2);
+  fill-opacity: 0.16;
+  stroke: var(--accent-2);
+  stroke-width: 1.5;
+}
+.box-w {
+  fill: var(--warn);
+  fill-opacity: 0.16;
+  stroke: var(--warn);
+  stroke-width: 1.5;
+}
+.box-v {
+  fill: var(--violet);
+  fill-opacity: 0.16;
+  stroke: var(--violet);
+  stroke-width: 1.5;
+}
+.ln {
+  stroke: var(--muted);
+  stroke-width: 1.8;
+  fill: none;
+}
+.ln-a {
+  stroke: var(--accent);
+  stroke-width: 2;
+  fill: none;
+}
+.ln-g {
+  stroke: var(--accent-2);
+  stroke-width: 2;
+  fill: none;
+}
+.ln-w {
+  stroke: var(--warn);
+  stroke-width: 2;
+  fill: none;
+}
+.ln-v {
+  stroke: var(--violet);
+  stroke-width: 2;
+  fill: none;
+}
+.flow {
+  stroke-dasharray: 6 6;
+  animation: dash 1.2s linear infinite;
+}
+.blink {
+  animation: blink 2.4s ease-in-out infinite;
+}
+.blink2 {
+  animation: blink 2.4s ease-in-out 1.2s infinite;
+}
+.grow {
+  transform-box: fill-box;
+  transform-origin: center bottom;
+  animation: grow 4s ease-in-out infinite;
+}
+.fadein {
+  animation: fadein 4s ease-in-out infinite;
+}
+.fadein2 {
+  animation: fadein 4s ease-in-out 2s infinite;
+}
+.step1 {
+  animation: step 6s infinite 0s;
+}
+.step2 {
+  animation: step 6s infinite 2s;
+}
+.step3 {
+  animation: step 6s infinite 4s;
+}
+
+.back {
+  text-decoration: none;
+  border: 1px solid;
+  padding: 4px 8px;
+  border-radius: 4px;
+  margin-right: 10px;
+}
+
+@keyframes dash {
+  to {
+    stroke-dashoffset: -24;
+  }
+}
+@keyframes blink {
+  0%,
+  100% {
+    opacity: 0.25;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+@keyframes fadein {
+  0% {
+    opacity: 0;
+  }
+  30% {
+    opacity: 1;
+  }
+  70% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+@keyframes grow {
+  0%,
+  100% {
+    transform: scaleY(0.6);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+@keyframes step {
+  0% {
+    opacity: 0;
+  }
+  5%,
+  30% {
+    opacity: 1;
+  }
+  35%,
+  100% {
+    opacity: 0.25;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+  }
+  animateMotion {
+    display: none;
+  }
+}

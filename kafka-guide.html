@@ -1,0 +1,1550 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Apache Kafka: A Visual Guide</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <!-- Shared arrowhead definitions -->
+    <svg width="0" height="0" style="position: absolute" aria-hidden="true">
+      <defs>
+        <marker
+          id="m-m"
+          viewBox="0 0 10 10"
+          refX="9"
+          refY="5"
+          markerWidth="7"
+          markerHeight="7"
+          orient="auto"
+        >
+          <path d="M0,0 L10,5 L0,10 z" style="fill: var(--muted)" />
+        </marker>
+        <marker
+          id="m-a"
+          viewBox="0 0 10 10"
+          refX="9"
+          refY="5"
+          markerWidth="7"
+          markerHeight="7"
+          orient="auto"
+        >
+          <path d="M0,0 L10,5 L0,10 z" style="fill: var(--accent)" />
+        </marker>
+        <marker
+          id="m-g"
+          viewBox="0 0 10 10"
+          refX="9"
+          refY="5"
+          markerWidth="7"
+          markerHeight="7"
+          orient="auto"
+        >
+          <path d="M0,0 L10,5 L0,10 z" style="fill: var(--accent-2)" />
+        </marker>
+        <marker
+          id="m-w"
+          viewBox="0 0 10 10"
+          refX="9"
+          refY="5"
+          markerWidth="7"
+          markerHeight="7"
+          orient="auto"
+        >
+          <path d="M0,0 L10,5 L0,10 z" style="fill: var(--warn)" />
+        </marker>
+        <marker
+          id="m-v"
+          viewBox="0 0 10 10"
+          refX="9"
+          refY="5"
+          markerWidth="7"
+          markerHeight="7"
+          orient="auto"
+        >
+          <path d="M0,0 L10,5 L0,10 z" style="fill: var(--violet)" />
+        </marker>
+      </defs>
+    </svg>
+
+    <main>
+      <header>
+        <div class="part"><a href="/" class="back">&#8592; Back</a>Visual guide</div>
+        <h1>Apache Kafka: Concepts, Internals and Patterns</h1>
+        <p>
+          A study guide with a diagram for each idea. Arrows show direction, and
+          the moving dots follow the arrows where data flows. The text is my own
+          explanation.
+        </p>
+      </header>
+
+      <nav class="toc">
+        <h2>Contents</h2>
+        <ol>
+          <li><a href="#overview">What Kafka is</a></li>
+          <li><a href="#topics">Topics, partitions and offsets</a></li>
+          <li><a href="#keys">Keys and ordering</a></li>
+          <li><a href="#brokers">Brokers and replication</a></li>
+          <li><a href="#acks">Producer acknowledgements</a></li>
+          <li><a href="#groups">Consumer groups</a></li>
+          <li><a href="#commits">Offsets and commits</a></li>
+          <li><a href="#semantics">Delivery guarantees</a></li>
+          <li><a href="#retention">Retention and compaction</a></li>
+          <li><a href="#rebalance">Rebalancing</a></li>
+          <li><a href="#metadata">Metadata: KRaft</a></li>
+          <li><a href="#ecosystem">Kafka Connect and Kafka Streams</a></li>
+          <li><a href="#lag">Consumer lag and common pitfalls</a></li>
+          <li><a href="#interview">Kafka in FANG-style interviews</a></li>
+          <li><a href="#reference">Quick reference</a></li>
+        </ol>
+      </nav>
+
+      <!-- ============ BASICS ============ -->
+      <h2 class="group">Basics</h2>
+
+      <section class="topic" id="overview">
+        <h2>What Kafka is</h2>
+        <p>
+          Kafka is a distributed event streaming platform. Producers write
+          events to it, and consumers read those events, often at a different
+          time and rate. Underneath, it is a set of append-only logs spread
+          across a cluster of servers called brokers. Because the data is kept
+          in a log rather than deleted on read, many independent consumers can
+          read the same events.
+        </p>
+        <figure>
+          <svg
+            viewBox="0 0 640 220"
+            role="img"
+            aria-label="Producers write to a Kafka cluster of brokers; consumers read from it"
+          >
+            <rect class="box-a" x="20" y="80" width="130" height="60" rx="8" />
+            <text class="tb" x="85" y="106" text-anchor="middle">
+              Producers
+            </text>
+            <text class="tm" x="85" y="124" text-anchor="middle">
+              apps, services, devices
+            </text>
+            <rect
+              class="box"
+              x="230"
+              y="30"
+              width="180"
+              height="160"
+              rx="10"
+              stroke-dasharray="4 4"
+            />
+            <text class="tb" x="320" y="52" text-anchor="middle">
+              Kafka cluster
+            </text>
+            <rect class="box-v" x="250" y="66" width="140" height="36" rx="6" />
+            <text class="t" x="320" y="89" text-anchor="middle">Broker 1</text>
+            <rect
+              class="box-v"
+              x="250"
+              y="112"
+              width="140"
+              height="36"
+              rx="6"
+            />
+            <text class="t" x="320" y="135" text-anchor="middle">Broker 2</text>
+            <rect
+              class="box-v"
+              x="250"
+              y="158"
+              width="140"
+              height="22"
+              rx="6"
+            />
+            <text class="t" x="320" y="173" text-anchor="middle">Broker 3</text>
+            <rect class="box-g" x="490" y="80" width="130" height="60" rx="8" />
+            <text class="tb" x="555" y="106" text-anchor="middle">
+              Consumers
+            </text>
+            <text class="tm" x="555" y="124" text-anchor="middle">
+              read at own pace
+            </text>
+            <path
+              class="ln-a flow"
+              marker-end="url(#m-a)"
+              d="M150 110 L230 110"
+            />
+            <path
+              class="ln-g flow"
+              marker-end="url(#m-g)"
+              d="M410 110 L490 110"
+            />
+            <circle r="5" fill="var(--accent)">
+              <animateMotion
+                dur="2.6s"
+                repeatCount="indefinite"
+                path="M150 110 L230 110"
+              />
+            </circle>
+            <circle r="5" fill="var(--accent-2)">
+              <animateMotion
+                dur="2.6s"
+                begin="1.3s"
+                repeatCount="indefinite"
+                path="M410 110 L490 110"
+              />
+            </circle>
+          </svg>
+          <figcaption>
+            Producers append events to brokers. Consumers read them, and the
+            events stay available for other consumers.
+          </figcaption>
+        </figure>
+      </section>
+
+      <section class="topic" id="topics">
+        <h2>Topics, partitions and offsets</h2>
+        <p>
+          A <strong>topic</strong> is a named stream of events, such as
+          <code>orders</code> or <code>page-views</code>. Each topic is split
+          into one or more <strong>partitions</strong>. A partition is an
+          ordered, append-only log. Each record in it gets a sequential number
+          called an <strong>offset</strong>, which is its position in that
+          partition. Offsets are unique only within a partition.
+        </p>
+        <p>
+          A record contains a key (optional), a value, a timestamp and optional
+          headers. The key affects which partition the record goes to, covered
+          in the next section.
+        </p>
+        <figure>
+          <svg
+            viewBox="0 0 640 230"
+            role="img"
+            aria-label="A topic with three partitions; records are appended at the end of each partition with increasing offsets"
+          >
+            <text class="tb" x="20" y="26">Topic: orders</text>
+            <text class="tm" x="20" y="44">Partition 0</text>
+            <text class="tm" x="20" y="96">Partition 1</text>
+            <text class="tm" x="20" y="148">Partition 2</text>
+            <rect class="box" x="110" y="28" width="60" height="30" rx="4" />
+            <text class="t" x="140" y="48" text-anchor="middle">0</text>
+            <rect class="box" x="176" y="28" width="60" height="30" rx="4" />
+            <text class="t" x="206" y="48" text-anchor="middle">1</text>
+            <rect class="box" x="242" y="28" width="60" height="30" rx="4" />
+            <text class="t" x="272" y="48" text-anchor="middle">2</text>
+            <rect class="box" x="308" y="28" width="60" height="30" rx="4" />
+            <text class="t" x="338" y="48" text-anchor="middle">3</text>
+            <rect class="box" x="110" y="80" width="60" height="30" rx="4" />
+            <text class="t" x="140" y="100" text-anchor="middle">0</text>
+            <rect class="box" x="176" y="80" width="60" height="30" rx="4" />
+            <text class="t" x="206" y="100" text-anchor="middle">1</text>
+            <rect class="box" x="110" y="132" width="60" height="30" rx="4" />
+            <text class="t" x="140" y="152" text-anchor="middle">0</text>
+            <rect class="box" x="176" y="132" width="60" height="30" rx="4" />
+            <text class="t" x="206" y="152" text-anchor="middle">1</text>
+            <rect class="box" x="242" y="132" width="60" height="30" rx="4" />
+            <text class="t" x="272" y="152" text-anchor="middle">2</text>
+            <rect class="box" x="308" y="132" width="60" height="30" rx="4" />
+            <text class="t" x="338" y="152" text-anchor="middle">3</text>
+            <rect
+              class="box-w blink"
+              x="374"
+              y="28"
+              width="60"
+              height="30"
+              rx="4"
+            />
+            <rect
+              class="box-w blink2"
+              x="242"
+              y="80"
+              width="60"
+              height="30"
+              rx="4"
+            />
+            <rect
+              class="box-w blink"
+              x="374"
+              y="132"
+              width="60"
+              height="30"
+              rx="4"
+            />
+            <path
+              class="ln-a flow"
+              marker-end="url(#m-a)"
+              d="M440 43 L520 43"
+            />
+            <path
+              class="ln-a flow"
+              marker-end="url(#m-a)"
+              d="M310 95 L400 95"
+            />
+            <path
+              class="ln-a flow"
+              marker-end="url(#m-a)"
+              d="M440 147 L520 147"
+            />
+            <text class="tm" x="20" y="200">
+              New records are appended on the right. Old records keep their
+              offsets.
+            </text>
+            <circle r="5" fill="var(--warn)">
+              <animateMotion
+                dur="2.6s"
+                repeatCount="indefinite"
+                path="M440 43 L520 43"
+              />
+            </circle>
+          </svg>
+          <figcaption>
+            Each partition is an append-only log. Offsets increase inside each
+            partition.
+          </figcaption>
+        </figure>
+      </section>
+
+      <section class="topic" id="keys">
+        <h2>Keys and ordering</h2>
+        <p>
+          Kafka guarantees order <strong>within a partition only</strong>. There
+          is no global order across the whole topic. When a record has a key,
+          Kafka hashes the key and uses the result to choose a partition. So all
+          records with the same key land in the same partition and stay in
+          order. Records without a key are spread across partitions.
+        </p>
+        <figure>
+          <svg
+            viewBox="0 0 640 230"
+            role="img"
+            aria-label="Records with keys are hashed to partitions; records with the same key go to the same partition"
+          >
+            <rect class="box-a" x="20" y="20" width="110" height="34" rx="6" />
+            <text class="t" x="75" y="42" text-anchor="middle">
+              key: user-7
+            </text>
+            <rect class="box-a" x="20" y="72" width="110" height="34" rx="6" />
+            <text class="t" x="75" y="94" text-anchor="middle">
+              key: user-3
+            </text>
+            <rect class="box-a" x="20" y="124" width="110" height="34" rx="6" />
+            <text class="t" x="75" y="146" text-anchor="middle">
+              key: user-7
+            </text>
+            <rect class="box-w" x="230" y="70" width="150" height="50" rx="8" />
+            <text class="tb" x="305" y="92" text-anchor="middle">
+              hash(key) mod N
+            </text>
+            <text class="tm" x="305" y="108" text-anchor="middle">
+              picks a partition
+            </text>
+            <rect class="box" x="450" y="20" width="170" height="44" rx="6" />
+            <text class="t" x="535" y="46" text-anchor="middle">
+              Partition 0
+            </text>
+            <rect class="box" x="450" y="92" width="170" height="44" rx="6" />
+            <text class="t" x="535" y="118" text-anchor="middle">
+              Partition 1
+            </text>
+            <rect class="box" x="450" y="164" width="170" height="44" rx="6" />
+            <text class="t" x="535" y="190" text-anchor="middle">
+              Partition 2
+            </text>
+            <path class="ln flow" marker-end="url(#m-m)" d="M130 37 L230 92" />
+            <path class="ln flow" marker-end="url(#m-m)" d="M130 89 L230 95" />
+            <path
+              class="ln flow"
+              marker-end="url(#m-m)"
+              d="M130 141 L230 105"
+            />
+            <path
+              class="ln-a flow"
+              marker-end="url(#m-a)"
+              d="M380 95 L450 42"
+            />
+            <path
+              class="ln-g flow"
+              marker-end="url(#m-g)"
+              d="M380 95 L450 114"
+            />
+            <path
+              class="ln-w flow"
+              marker-end="url(#m-w)"
+              d="M380 95 L450 186"
+            />
+            <circle r="5" fill="var(--accent)">
+              <animateMotion
+                dur="2.6s"
+                repeatCount="indefinite"
+                path="M130 37 L230 92 L380 95 L450 42"
+              />
+            </circle>
+            <circle r="5" fill="var(--accent)">
+              <animateMotion
+                dur="2.6s"
+                begin="1.3s"
+                repeatCount="indefinite"
+                path="M130 141 L230 105 L380 95 L450 186"
+              />
+            </circle>
+            <text class="tm" x="20" y="212">
+              user-7 records always share one partition, so their order is kept.
+            </text>
+          </svg>
+          <figcaption>
+            Same key, same partition. Ordering is guaranteed per key, not across
+            keys.
+          </figcaption>
+        </figure>
+        <div class="fang">
+          <strong>Interview lens:</strong> Expect "how do you pick a partition
+          key?" Name the ordering requirement first, then the spread: a key with
+          few values or one very busy value creates hot partitions.
+        </div>
+      </section>
+
+      <!-- ============ CLUSTER ============ -->
+      <h2 class="group">Cluster and reliability</h2>
+
+      <section class="topic" id="brokers">
+        <h2>Brokers and replication</h2>
+        <p>
+          A broker is a Kafka server. Each partition is stored on several
+          brokers based on its <strong>replication factor</strong>, often 3. One
+          replica is the <strong>leader</strong> and handles all reads and
+          writes for that partition. The others are
+          <strong>followers</strong> that copy the leader's data. The followers
+          that are fully caught up form the
+          <strong>in-sync replica set (ISR)</strong>. If a leader fails, a new
+          leader is chosen from the ISR, so committed data is not lost.
+        </p>
+        <figure>
+          <svg
+            viewBox="0 0 640 230"
+            role="img"
+            aria-label="Partition 0 has a leader on broker 1 and followers on brokers 2 and 3; the leader replicates to followers"
+          >
+            <rect
+              class="box-v"
+              x="40"
+              y="60"
+              width="150"
+              height="110"
+              rx="10"
+            />
+            <text class="tb" x="115" y="84" text-anchor="middle">Broker 1</text>
+            <rect class="box-a" x="65" y="100" width="100" height="40" rx="6" />
+            <text class="t" x="115" y="124" text-anchor="middle">
+              P0 leader
+            </text>
+            <rect
+              class="box-v"
+              x="250"
+              y="20"
+              width="150"
+              height="90"
+              rx="10"
+            />
+            <text class="tb" x="325" y="44" text-anchor="middle">Broker 2</text>
+            <rect class="box-g" x="275" y="58" width="100" height="36" rx="6" />
+            <text class="t" x="325" y="81" text-anchor="middle">
+              P0 follower
+            </text>
+            <rect
+              class="box-v"
+              x="250"
+              y="130"
+              width="150"
+              height="90"
+              rx="10"
+            />
+            <text class="tb" x="325" y="154" text-anchor="middle">
+              Broker 3
+            </text>
+            <rect
+              class="box-g"
+              x="275"
+              y="168"
+              width="100"
+              height="36"
+              rx="6"
+            />
+            <text class="t" x="325" y="191" text-anchor="middle">
+              P0 follower
+            </text>
+            <path
+              class="ln-a flow"
+              marker-end="url(#m-a)"
+              d="M190 110 L250 70"
+            />
+            <path
+              class="ln-a flow"
+              marker-end="url(#m-a)"
+              d="M190 120 L250 170"
+            />
+            <text class="tm" x="440" y="70">Writes go to the leader.</text>
+            <text class="tm" x="440" y="88">Followers copy them.</text>
+            <text class="tm" x="440" y="130">ISR = leader + caught-up</text>
+            <text class="tm" x="440" y="148">followers</text>
+            <circle r="5" fill="var(--accent)">
+              <animateMotion
+                dur="2.6s"
+                repeatCount="indefinite"
+                path="M190 110 L250 70"
+              />
+            </circle>
+            <circle r="5" fill="var(--accent)">
+              <animateMotion
+                dur="2.6s"
+                begin="1.3s"
+                repeatCount="indefinite"
+                path="M190 120 L250 170"
+              />
+            </circle>
+          </svg>
+          <figcaption>
+            One leader takes writes, and followers keep copies ready to take
+            over.
+          </figcaption>
+        </figure>
+      </section>
+
+      <section class="topic" id="acks">
+        <h2>Producer acknowledgements</h2>
+        <p>
+          The producer's <code>acks</code> setting controls how long it waits
+          before treating a write as successful. This is the main trade-off
+          between speed and durability:
+        </p>
+        <ul>
+          <li>
+            <strong>acks=0</strong>: the producer does not wait. Fastest, but
+            records can be lost silently.
+          </li>
+          <li>
+            <strong>acks=1</strong>: the leader confirms after writing to its
+            own log. A leader failure before replication can still lose the
+            record.
+          </li>
+          <li>
+            <strong>acks=all</strong>: the leader confirms after every in-sync
+            replica has the record. Combined with
+            <code>min.insync.replicas</code>, this is the setting for data you
+            cannot lose.
+          </li>
+        </ul>
+        <figure>
+          <svg
+            viewBox="0 0 640 230"
+            role="img"
+            aria-label="With acks all, the producer waits for the leader and followers before receiving the acknowledgement"
+          >
+            <rect class="box-a" x="20" y="90" width="110" height="50" rx="8" />
+            <text class="tb" x="75" y="120" text-anchor="middle">Producer</text>
+            <rect class="box-v" x="240" y="90" width="110" height="50" rx="8" />
+            <text class="tb" x="295" y="120" text-anchor="middle">Leader</text>
+            <rect class="box-g" x="480" y="30" width="130" height="44" rx="8" />
+            <text class="t" x="545" y="57" text-anchor="middle">
+              Follower 1
+            </text>
+            <rect
+              class="box-g"
+              x="480"
+              y="150"
+              width="130"
+              height="44"
+              rx="8"
+            />
+            <text class="t" x="545" y="177" text-anchor="middle">
+              Follower 2
+            </text>
+            <path
+              class="ln-a flow"
+              marker-end="url(#m-a)"
+              d="M130 115 L240 115"
+            />
+            <path
+              class="ln-g flow"
+              marker-end="url(#m-g)"
+              d="M350 105 L480 52"
+            />
+            <path
+              class="ln-g flow"
+              marker-end="url(#m-g)"
+              d="M350 125 L480 172"
+            />
+            <path
+              class="ln-w flow"
+              marker-end="url(#m-w)"
+              d="M240 125 L130 125"
+            />
+            <text class="tm" x="180" y="108" text-anchor="middle">1. send</text>
+            <text class="tm" x="420" y="75" text-anchor="middle">
+              2. replicate
+            </text>
+            <text class="tm" x="180" y="200" text-anchor="middle">
+              3. ack after all replicas
+            </text>
+            <circle r="5" fill="var(--accent)">
+              <animateMotion
+                dur="2.6s"
+                repeatCount="indefinite"
+                path="M130 115 L240 115"
+              />
+            </circle>
+            <circle r="5" fill="var(--warn)">
+              <animateMotion
+                dur="2.6s"
+                begin="1.3s"
+                repeatCount="indefinite"
+                path="M240 125 L130 125"
+              />
+            </circle>
+          </svg>
+          <figcaption>
+            With acks=all, the acknowledgement waits until the replicas have the
+            record.
+          </figcaption>
+        </figure>
+        <div class="fang">
+          <strong>Interview lens:</strong> Always state the durability choice
+          and its cost in one sentence: "acks=all with min.insync.replicas=2 and
+          replication factor 3, so one broker can fail without losing
+          acknowledged writes, at the cost of added write latency."
+        </div>
+      </section>
+
+      <!-- ============ CONSUMING ============ -->
+      <h2 class="group">Consuming</h2>
+
+      <section class="topic" id="groups">
+        <h2>Consumer groups</h2>
+        <p>
+          A consumer group is a set of consumers that share the work of reading
+          a topic. Within a group, each partition is assigned to
+          <strong>at most one</strong> consumer at a time. That is how Kafka
+          scales reading: the maximum parallelism of a group equals the number
+          of partitions. Consumers in a group beyond that number sit idle.
+          Different groups read the same topic independently, and each group
+          keeps its own position.
+        </p>
+        <figure>
+          <svg
+            viewBox="0 0 640 260"
+            role="img"
+            aria-label="A topic with four partitions is read by group A with two consumers and by group B with one consumer"
+          >
+            <rect
+              class="box"
+              x="20"
+              y="20"
+              width="200"
+              height="200"
+              rx="10"
+              stroke-dasharray="4 4"
+            />
+            <text class="tb" x="120" y="42" text-anchor="middle">
+              Topic: 4 partitions
+            </text>
+            <rect class="box-a" x="50" y="60" width="140" height="32" rx="6" />
+            <text class="t" x="120" y="81" text-anchor="middle">P0</text>
+            <rect class="box-a" x="50" y="100" width="140" height="32" rx="6" />
+            <text class="t" x="120" y="121" text-anchor="middle">P1</text>
+            <rect class="box-a" x="50" y="140" width="140" height="32" rx="6" />
+            <text class="t" x="120" y="161" text-anchor="middle">P2</text>
+            <rect class="box-a" x="50" y="180" width="140" height="26" rx="6" />
+            <text class="t" x="120" y="197" text-anchor="middle">P3</text>
+            <rect
+              class="box-g"
+              x="300"
+              y="20"
+              width="150"
+              height="110"
+              rx="10"
+            />
+            <text class="tb" x="375" y="42" text-anchor="middle">Group A</text>
+            <rect class="box" x="320" y="54" width="110" height="30" rx="6" />
+            <text class="t" x="375" y="74" text-anchor="middle">
+              Consumer A1
+            </text>
+            <rect class="box" x="320" y="94" width="110" height="30" rx="6" />
+            <text class="t" x="375" y="114" text-anchor="middle">
+              Consumer A2
+            </text>
+            <rect
+              class="box-w"
+              x="300"
+              y="160"
+              width="150"
+              height="60"
+              rx="10"
+            />
+            <text class="tb" x="375" y="182" text-anchor="middle">Group B</text>
+            <rect class="box" x="320" y="192" width="110" height="20" rx="6" />
+            <text class="t" x="375" y="206" text-anchor="middle">
+              Consumer B1
+            </text>
+            <path
+              class="ln-g flow"
+              marker-end="url(#m-g)"
+              d="M190 76 L320 69"
+            />
+            <path
+              class="ln-g flow"
+              marker-end="url(#m-g)"
+              d="M190 116 L320 69"
+            />
+            <path
+              class="ln-g flow"
+              marker-end="url(#m-g)"
+              d="M190 156 L320 109"
+            />
+            <path
+              class="ln-g flow"
+              marker-end="url(#m-g)"
+              d="M190 196 L320 109"
+            />
+            <path
+              class="ln-w flow"
+              marker-end="url(#m-w)"
+              d="M190 116 L320 202"
+            />
+            <path
+              class="ln-w flow"
+              marker-end="url(#m-w)"
+              d="M190 196 L320 202"
+            />
+            <text class="tm" x="480" y="60">Group A: P0 and P1 to A1,</text>
+            <text class="tm" x="480" y="78">P2 and P3 to A2 (one each)</text>
+            <text class="tm" x="480" y="200">Group B reads all partitions</text>
+            <text class="tm" x="480" y="218">with its own offsets</text>
+            <circle r="5" fill="var(--accent-2)">
+              <animateMotion
+                dur="2.6s"
+                repeatCount="indefinite"
+                path="M190 76 L320 69"
+              />
+            </circle>
+            <circle r="5" fill="var(--warn)">
+              <animateMotion
+                dur="2.6s"
+                begin="1.3s"
+                repeatCount="indefinite"
+                path="M190 196 L320 202"
+              />
+            </circle>
+          </svg>
+          <figcaption>
+            Each partition goes to one consumer per group. Separate groups each
+            get every record.
+          </figcaption>
+        </figure>
+        <div class="fang">
+          <strong>Interview lens:</strong> The partition count is the ceiling on
+          parallelism. If the interviewer asks you to scale a consumer that is
+          already at that ceiling, the answer is more partitions (with a plan
+          for the key remapping), not more consumers.
+        </div>
+      </section>
+
+      <section class="topic" id="commits">
+        <h2>Offsets and commits</h2>
+        <p>
+          A consumer tracks its position in each partition using offsets. After
+          processing records, it <strong>commits</strong> the offset to Kafka,
+          which stores committed offsets in an internal topic. If the consumer
+          restarts, it resumes from the last committed offset. Anything read but
+          not yet committed is read again.
+        </p>
+        <p>
+          Commits can be automatic (on a timer, which can commit before
+          processing finishes) or manual (after your code succeeds). Choosing
+          when to commit decides what happens during a crash.
+        </p>
+        <figure>
+          <svg
+            viewBox="0 0 640 170"
+            role="img"
+            aria-label="A partition log with the committed offset behind the current read position"
+          >
+            <text class="tb" x="20" y="28">Partition 0</text>
+            <rect class="box" x="120" y="50" width="48" height="36" rx="4" />
+            <text class="t" x="144" y="73" text-anchor="middle">40</text>
+            <rect class="box" x="172" y="50" width="48" height="36" rx="4" />
+            <text class="t" x="196" y="73" text-anchor="middle">41</text>
+            <rect class="box" x="224" y="50" width="48" height="36" rx="4" />
+            <text class="t" x="248" y="73" text-anchor="middle">42</text>
+            <rect class="box" x="276" y="50" width="48" height="36" rx="4" />
+            <text class="t" x="300" y="73" text-anchor="middle">43</text>
+            <rect class="box" x="328" y="50" width="48" height="36" rx="4" />
+            <text class="t" x="352" y="73" text-anchor="middle">44</text>
+            <rect class="box" x="380" y="50" width="48" height="36" rx="4" />
+            <text class="t" x="404" y="73" text-anchor="middle">45</text>
+            <path class="ln-g" marker-end="url(#m-g)" d="M196 112 L196 96" />
+            <text class="tb" x="196" y="128" text-anchor="middle">
+              committed (41)
+            </text>
+            <path class="ln-a" marker-end="url(#m-a)" d="M300 112 L300 96" />
+            <text class="tb" x="300" y="128" text-anchor="middle">
+              reading (43)
+            </text>
+            <text class="tm" x="20" y="158">
+              After a crash, reading restarts at 41, so 41 and 42 are processed
+              again.
+            </text>
+          </svg>
+          <figcaption>
+            The gap between the committed offset and the current position is
+            work that may be repeated after a crash.
+          </figcaption>
+        </figure>
+      </section>
+
+      <section class="topic" id="semantics">
+        <h2>Delivery guarantees</h2>
+        <p>
+          The order of "process" and "commit" decides how a crash is handled.
+          There are three standard guarantees:
+        </p>
+        <ul>
+          <li>
+            <strong>At-most-once</strong>: commit first, then process. A crash
+            after the commit loses that record. No duplicates, but possible
+            loss.
+          </li>
+          <li>
+            <strong>At-least-once</strong>: process first, then commit. A crash
+            before the commit repeats the record. No loss, but duplicates are
+            possible, so make processing idempotent.
+          </li>
+          <li>
+            <strong>Exactly-once</strong>: Kafka transactions combine the output
+            writes and the offset commit into one atomic step. Consumers read
+            with <code>read_committed</code> to skip aborted writes. This works
+            inside Kafka. Writes to outside systems still need idempotent
+            handling or a transactional sink.
+          </li>
+        </ul>
+        <figure>
+          <svg
+            viewBox="0 0 640 260"
+            role="img"
+            aria-label="Three flows: commit then process, process then commit, and atomic transaction"
+          >
+            <text class="tb" x="20" y="24">At-most-once</text>
+            <rect class="box-a" x="150" y="8" width="110" height="26" rx="5" />
+            <text class="t" x="205" y="25" text-anchor="middle">commit</text>
+            <rect class="box-a" x="290" y="8" width="110" height="26" rx="5" />
+            <text class="t" x="345" y="25" text-anchor="middle">process</text>
+            <path
+              class="ln-w flow"
+              marker-end="url(#m-w)"
+              d="M260 21 L290 21"
+            />
+            <text class="tm" x="420" y="25">crash after commit = lost</text>
+
+            <text class="tb" x="20" y="90">At-least-once</text>
+            <rect class="box-a" x="150" y="74" width="110" height="26" rx="5" />
+            <text class="t" x="205" y="91" text-anchor="middle">process</text>
+            <rect class="box-a" x="290" y="74" width="110" height="26" rx="5" />
+            <text class="t" x="345" y="91" text-anchor="middle">commit</text>
+            <path
+              class="ln-g flow"
+              marker-end="url(#m-g)"
+              d="M260 87 L290 87"
+            />
+            <text class="tm" x="420" y="91">
+              crash before commit = repeated
+            </text>
+
+            <text class="tb" x="20" y="156">Exactly-once</text>
+            <rect
+              class="box-g"
+              x="150"
+              y="140"
+              width="330"
+              height="40"
+              rx="6"
+            />
+            <text class="t" x="315" y="165" text-anchor="middle">
+              one transaction: write outputs + commit offsets
+            </text>
+            <path
+              class="ln-v flow"
+              marker-end="url(#m-v)"
+              d="M315 180 L315 200"
+            />
+            <text class="tm" x="330" y="216">all or nothing</text>
+
+            <circle r="5" fill="var(--warn)">
+              <animateMotion
+                dur="2.6s"
+                repeatCount="indefinite"
+                path="M260 21 L290 21"
+              />
+            </circle>
+            <circle r="5" fill="var(--accent-2)">
+              <animateMotion
+                dur="2.6s"
+                repeatCount="indefinite"
+                path="M260 87 L290 87"
+              />
+            </circle>
+          </svg>
+          <figcaption>
+            The order of processing and committing decides whether a crash loses
+            data or repeats it.
+          </figcaption>
+        </figure>
+        <div class="fang">
+          <strong>Interview lens:</strong> Do not answer "exactly-once" without
+          qualification. Say what is exactly-once (Kafka-to-Kafka with
+          transactions) and what still needs idempotent handling (databases,
+          emails, payments). Interviewers listen for that boundary.
+        </div>
+      </section>
+
+      <!-- ============ STORAGE AND OPERATIONS ============ -->
+      <h2 class="group">Storage and operations</h2>
+
+      <section class="topic" id="retention">
+        <h2>Retention and compaction</h2>
+        <p>
+          Kafka does not delete records when they are read. Records are removed
+          by a policy:
+        </p>
+        <ul>
+          <li>
+            <strong>Time or size retention</strong> (<code>retention.ms</code>,
+            <code>retention.bytes</code>): old segments are deleted after a
+            period or once the log exceeds a size.
+          </li>
+          <li>
+            <strong>Log compaction</strong>: for each key, Kafka keeps only the
+            latest value. A record with a null value (a tombstone) deletes the
+            key after a delay. This suits changelogs and current-state data,
+            such as the latest profile for each user.
+          </li>
+        </ul>
+        <figure>
+          <svg
+            viewBox="0 0 640 210"
+            role="img"
+            aria-label="Before compaction, a key has several values; after compaction, only the latest value per key remains"
+          >
+            <text class="tb" x="20" y="24">Before compaction</text>
+            <rect class="box" x="20" y="36" width="70" height="28" rx="4" />
+            <text class="t" x="55" y="55" text-anchor="middle">a=1</text>
+            <rect class="box" x="96" y="36" width="70" height="28" rx="4" />
+            <text class="t" x="131" y="55" text-anchor="middle">b=5</text>
+            <rect class="box" x="172" y="36" width="70" height="28" rx="4" />
+            <text class="t" x="207" y="55" text-anchor="middle">a=2</text>
+            <rect class="box" x="248" y="36" width="70" height="28" rx="4" />
+            <text class="t" x="283" y="55" text-anchor="middle">c=9</text>
+            <rect class="box" x="324" y="36" width="70" height="28" rx="4" />
+            <text class="t" x="359" y="55" text-anchor="middle">a=3</text>
+            <rect class="box" x="400" y="36" width="70" height="28" rx="4" />
+            <text class="t" x="435" y="55" text-anchor="middle">b=null</text>
+            <path
+              class="ln-v flow"
+              marker-end="url(#m-v)"
+              d="M320 84 L320 110"
+            />
+            <text class="tb" x="20" y="130">After compaction</text>
+            <rect class="box-g" x="20" y="142" width="70" height="28" rx="4" />
+            <text class="t" x="55" y="161" text-anchor="middle">a=3</text>
+            <rect class="box-g" x="96" y="142" width="70" height="28" rx="4" />
+            <text class="t" x="131" y="161" text-anchor="middle">c=9</text>
+            <text class="tm" x="190" y="161">
+              b was deleted by its tombstone
+            </text>
+            <circle r="5" fill="var(--violet)">
+              <animateMotion
+                dur="2.6s"
+                repeatCount="indefinite"
+                path="M320 84 L320 110"
+              />
+            </circle>
+          </svg>
+          <figcaption>
+            Compaction keeps the newest value for each key and drops older ones.
+          </figcaption>
+        </figure>
+      </section>
+
+      <section class="topic" id="rebalance">
+        <h2>Rebalancing</h2>
+        <p>
+          When a consumer joins or leaves a group, or stops responding, Kafka
+          reassigns partitions among the remaining consumers. This is a
+          <strong>rebalance</strong>. Older protocols stop every consumer while
+          partitions move (eager rebalancing). The cooperative protocol moves
+          only the partitions that need to change, so most consumers keep
+          working.
+        </p>
+        <figure>
+          <svg
+            viewBox="0 0 640 220"
+            role="img"
+            aria-label="When consumer C3 joins, partitions are reassigned so each of three consumers has about the same load"
+          >
+            <text class="tb" x="20" y="24">
+              Before: 2 consumers, 4 partitions
+            </text>
+            <rect class="box-g" x="20" y="36" width="130" height="60" rx="8" />
+            <text class="t" x="85" y="62" text-anchor="middle">C1: P0, P1</text>
+            <rect class="box-g" x="170" y="36" width="130" height="60" rx="8" />
+            <text class="t" x="235" y="62" text-anchor="middle">
+              C2: P2, P3
+            </text>
+            <text class="tb" x="20" y="130">After C3 joins</text>
+            <rect class="box-g" x="20" y="142" width="130" height="60" rx="8" />
+            <text class="t" x="85" y="168" text-anchor="middle">C1: P0</text>
+            <rect
+              class="box-g"
+              x="170"
+              y="142"
+              width="130"
+              height="60"
+              rx="8"
+            />
+            <text class="t" x="235" y="168" text-anchor="middle">
+              C2: P1, P2
+            </text>
+            <rect
+              class="box-w blink"
+              x="320"
+              y="142"
+              width="130"
+              height="60"
+              rx="8"
+            />
+            <text class="t" x="385" y="168" text-anchor="middle">C3: P3</text>
+            <path
+              class="ln-w flow"
+              marker-end="url(#m-w)"
+              d="M235 96 L235 140"
+            />
+            <path class="ln-w flow" marker-end="url(#m-w)" d="M85 96 L85 140" />
+            <circle r="5" fill="var(--warn)">
+              <animateMotion
+                dur="2.6s"
+                repeatCount="indefinite"
+                path="M235 96 L235 140"
+              />
+            </circle>
+            <text class="tm" x="470" y="168">
+              Only moved partitions are reassigned
+            </text>
+          </svg>
+          <figcaption>
+            A new consumer takes over some partitions. Consumers without changes
+            keep reading.
+          </figcaption>
+        </figure>
+      </section>
+
+      <section class="topic" id="metadata">
+        <h2>Metadata: KRaft</h2>
+        <p>
+          Kafka must track which brokers are alive, who leads each partition and
+          the topic configuration. Earlier versions used Apache ZooKeeper for
+          this. Current Kafka uses <strong>KRaft</strong>, where a quorum of
+          controller nodes stores the metadata in a Kafka log of its own. This
+          removes an external dependency and makes large clusters faster to
+          recover. ZooKeeper support was removed in Kafka 4.0.
+        </p>
+        <figure>
+          <svg
+            viewBox="0 0 640 200"
+            role="img"
+            aria-label="Controller quorum manages metadata for brokers"
+          >
+            <rect
+              class="box-v"
+              x="40"
+              y="40"
+              width="250"
+              height="120"
+              rx="10"
+            />
+            <text class="tb" x="165" y="64" text-anchor="middle">
+              Controller quorum (KRaft)
+            </text>
+            <rect class="box" x="60" y="80" width="90" height="48" rx="6" />
+            <text class="t" x="105" y="108" text-anchor="middle">
+              Controller 1
+            </text>
+            <rect class="box" x="170" y="80" width="90" height="48" rx="6" />
+            <text class="t" x="215" y="108" text-anchor="middle">
+              Controller 2
+            </text>
+            <rect
+              class="box-a"
+              x="380"
+              y="40"
+              width="220"
+              height="120"
+              rx="10"
+            />
+            <text class="tb" x="490" y="64" text-anchor="middle">Brokers</text>
+            <rect class="box" x="400" y="80" width="90" height="48" rx="6" />
+            <text class="t" x="445" y="108" text-anchor="middle">Broker 1</text>
+            <rect class="box" x="510" y="80" width="90" height="48" rx="6" />
+            <text class="t" x="555" y="108" text-anchor="middle">Broker 2</text>
+            <path
+              class="ln-v flow"
+              marker-end="url(#m-v)"
+              d="M290 100 L380 100"
+            />
+            <circle r="5" fill="var(--violet)">
+              <animateMotion
+                dur="2.6s"
+                repeatCount="indefinite"
+                path="M290 100 L380 100"
+              />
+            </circle>
+            <text class="tm" x="320" y="182" text-anchor="middle">
+              metadata flows from controllers to brokers
+            </text>
+          </svg>
+          <figcaption>
+            Controllers hold cluster metadata and push changes to brokers.
+          </figcaption>
+        </figure>
+      </section>
+
+      <!-- ============ ECOSYSTEM ============ -->
+      <h2 class="group">Ecosystem</h2>
+
+      <section class="topic" id="ecosystem">
+        <h2>Kafka Connect and Kafka Streams</h2>
+        <p>
+          <strong>Kafka Connect</strong> moves data between Kafka and other
+          systems without custom code. A <em>source connector</em> reads from a
+          database or service into Kafka. A <em>sink connector</em> writes from
+          Kafka into a warehouse, search index or storage.
+          <strong>Kafka Streams</strong> is a client library for processing
+          topics: filtering, joining, aggregating and windowing, with state kept
+          in local stores that are backed up to Kafka.
+        </p>
+        <figure>
+          <svg
+            viewBox="0 0 640 230"
+            role="img"
+            aria-label="A database feeds Kafka through a source connector; a Streams app processes a topic; a sink connector writes to a warehouse"
+          >
+            <rect class="box-a" x="20" y="90" width="120" height="50" rx="8" />
+            <text class="tb" x="80" y="120" text-anchor="middle">Database</text>
+            <rect class="box-v" x="170" y="90" width="110" height="50" rx="8" />
+            <text class="t" x="225" y="120" text-anchor="middle">
+              Source connector
+            </text>
+            <rect
+              class="box"
+              x="330"
+              y="30"
+              width="130"
+              height="170"
+              rx="10"
+              stroke-dasharray="4 4"
+            />
+            <text class="tb" x="395" y="56" text-anchor="middle">
+              Kafka topics
+            </text>
+            <rect class="box-g" x="350" y="130" width="90" height="34" rx="6" />
+            <text class="t" x="395" y="152" text-anchor="middle">
+              Streams app
+            </text>
+            <rect class="box-v" x="500" y="90" width="120" height="50" rx="8" />
+            <text class="t" x="560" y="120" text-anchor="middle">
+              Sink connector
+            </text>
+            <path
+              class="ln-a flow"
+              marker-end="url(#m-a)"
+              d="M140 115 L170 115"
+            />
+            <path
+              class="ln-v flow"
+              marker-end="url(#m-v)"
+              d="M280 115 L330 115"
+            />
+            <path
+              class="ln-g flow"
+              marker-end="url(#m-g)"
+              d="M395 130 L395 96"
+            />
+            <path
+              class="ln-v flow"
+              marker-end="url(#m-v)"
+              d="M460 115 L500 115"
+            />
+            <rect
+              class="box-w"
+              x="500"
+              y="170"
+              width="120"
+              height="30"
+              rx="6"
+            />
+            <text class="t" x="560" y="190" text-anchor="middle">
+              Warehouse
+            </text>
+            <path
+              class="ln flow"
+              marker-end="url(#m-m)"
+              d="M560 140 L560 170"
+            />
+            <circle r="5" fill="var(--accent)">
+              <animateMotion
+                dur="2.6s"
+                repeatCount="indefinite"
+                path="M140 115 L170 115"
+              />
+            </circle>
+            <circle r="5" fill="var(--violet)">
+              <animateMotion
+                dur="2.6s"
+                begin="1.3s"
+                repeatCount="indefinite"
+                path="M460 115 L500 115"
+              />
+            </circle>
+          </svg>
+          <figcaption>
+            Connect moves data into and out of Kafka. Streams processes the data
+            while it is inside Kafka.
+          </figcaption>
+        </figure>
+      </section>
+
+      <!-- ============ OPERATIONS ============ -->
+      <h2 class="group">Operating Kafka</h2>
+
+      <section class="topic" id="lag">
+        <h2>Consumer lag and common pitfalls</h2>
+        <p>
+          <strong>Consumer lag</strong> is the difference between the newest
+          offset in a partition and the consumer group's committed offset.
+          Growing lag means consumers are falling behind. It is the most useful
+          health signal for a Kafka pipeline.
+        </p>
+        <p>Common pitfalls:</p>
+        <ul>
+          <li>
+            <strong>Too few partitions</strong> caps consumer parallelism.
+            Adding partitions later changes which partition a key maps to, which
+            can break key ordering for existing data.
+          </li>
+          <li>
+            <strong>Hot keys</strong>: one very busy key sends most traffic to
+            one partition. Pick keys with a more even spread.
+          </li>
+          <li>
+            <strong>Too many partitions</strong> add overhead to brokers and
+            slow recovery after failures.
+          </li>
+          <li>
+            <strong>Long processing inside the poll loop</strong> can exceed the
+            consumer timeout, which triggers a rebalance.
+          </li>
+          <li>
+            <strong>Losing data with acks=1 or a small ISR</strong>: use
+            <code>acks=all</code> with a suitable
+            <code>min.insync.replicas</code> for important topics.
+          </li>
+        </ul>
+        <figure>
+          <svg
+            viewBox="0 0 640 170"
+            role="img"
+            aria-label="Consumer lag: the consumer's committed offset is behind the end of the log by a visible gap"
+          >
+            <text class="tb" x="20" y="30">Partition 0</text>
+            <rect class="box" x="120" y="16" width="380" height="30" rx="4" />
+            <rect class="box-a" x="120" y="16" width="260" height="30" rx="4" />
+            <rect
+              class="box-w blink"
+              x="380"
+              y="16"
+              width="120"
+              height="30"
+              rx="4"
+            />
+            <text class="t" x="250" y="36" text-anchor="middle">
+              consumed and committed
+            </text>
+            <text class="t" x="440" y="36" text-anchor="middle">lag</text>
+            <path class="ln-a" marker-end="url(#m-a)" d="M380 66 L380 52" />
+            <text class="tb" x="380" y="82" text-anchor="middle">
+              committed offset
+            </text>
+            <path class="ln-w" marker-end="url(#m-w)" d="M500 66 L500 52" />
+            <text class="tb" x="500" y="82" text-anchor="middle">log end</text>
+            <text class="tm" x="20" y="130">
+              Lag = log end − committed offset. A rising line on a chart means
+              the consumer cannot keep up.
+            </text>
+          </svg>
+          <figcaption>
+            Lag is the distance between the end of the log and what the consumer
+            has committed.
+          </figcaption>
+        </figure>
+        <div class="fang">
+          <strong>Interview lens:</strong> Treat lag as the first monitoring
+          signal you would name. Follow it with the likely causes in order: slow
+          processing, a hot partition, frequent rebalances, then broker or
+          network trouble.
+        </div>
+      </section>
+
+      <!-- ============ INTERVIEW ============ -->
+      <h2 class="group">Interview perspective</h2>
+
+      <section class="topic" id="interview">
+        <h2>Kafka in FANG-style interviews</h2>
+        <p>
+          In a system design round, Kafka usually appears as the event backbone
+          for a feed, analytics pipeline, notification system or payment event
+          stream. Interviewers are less interested in the API and more in
+          whether you can size the cluster, pick the right keys, and explain
+          what happens when things fail. The points below are a common
+          structure, not an official rubric.
+        </p>
+
+        <h3 class="cap-title">1. Justify the choice</h3>
+        <p>
+          State why Kafka fits: high throughput, a replayable log, several
+          independent consumers, and retention long enough for reprocessing.
+          Mention the alternative you rejected and why. For example, a plain
+          task queue deletes a message once it is consumed, which rules it out
+          when several systems need the same events.
+        </p>
+
+        <h3 class="cap-title">2. Size partitions and storage</h3>
+        <p>
+          Work from the numbers, as in the estimation section of the interview
+          prep page. The partition count needs to satisfy two constraints:
+          throughput and consumer parallelism. Add headroom, because increasing
+          partitions later changes key mapping.
+        </p>
+        <figure>
+          <svg
+            viewBox="0 0 640 230"
+            role="img"
+            aria-label="Partition count from throughput and consumer parallelism, with headroom"
+          >
+            <rect class="box-a" x="20" y="20" width="180" height="46" rx="8" />
+            <text class="t" x="110" y="40" text-anchor="middle">
+              Peak throughput
+            </text>
+            <text class="tm" x="110" y="56" text-anchor="middle">
+              e.g. 300 MB/s
+            </text>
+            <rect class="box-a" x="20" y="90" width="180" height="46" rx="8" />
+            <text class="t" x="110" y="110" text-anchor="middle">
+              Per-partition rate
+            </text>
+            <text class="tm" x="110" y="126" text-anchor="middle">
+              e.g. 10 MB/s (measure it)
+            </text>
+            <rect class="box-g" x="20" y="160" width="180" height="46" rx="8" />
+            <text class="t" x="110" y="180" text-anchor="middle">
+              Consumers wanted
+            </text>
+            <text class="tm" x="110" y="196" text-anchor="middle">
+              e.g. 40 parallel
+            </text>
+            <rect
+              class="box-w"
+              x="250"
+              y="60"
+              width="150"
+              height="86"
+              rx="10"
+            />
+            <text class="tb" x="325" y="90" text-anchor="middle">
+              Partitions
+            </text>
+            <text class="t" x="325" y="110" text-anchor="middle">
+              ≥ max of the two
+            </text>
+            <text class="tm" x="325" y="128" text-anchor="middle">
+              then × 1.5 headroom
+            </text>
+            <rect
+              class="box-v"
+              x="460"
+              y="60"
+              width="160"
+              height="86"
+              rx="10"
+            />
+            <text class="tb" x="540" y="90" text-anchor="middle">
+              Example result
+            </text>
+            <text class="t" x="540" y="110" text-anchor="middle">
+              30 MB/s ÷ 10 → 30
+            </text>
+            <text class="t" x="540" y="128" text-anchor="middle">
+              40 consumers → 40 × 1.5 = 60
+            </text>
+            <path
+              class="ln-a flow"
+              marker-end="url(#m-a)"
+              d="M200 43 L250 90"
+            />
+            <path
+              class="ln-a flow"
+              marker-end="url(#m-a)"
+              d="M200 113 L250 107"
+            />
+            <path
+              class="ln-g flow"
+              marker-end="url(#m-g)"
+              d="M200 183 L250 125"
+            />
+            <path
+              class="ln-w flow"
+              marker-end="url(#m-w)"
+              d="M400 103 L460 103"
+            />
+            <circle r="5" fill="var(--warn)">
+              <animateMotion
+                dur="2.6s"
+                repeatCount="indefinite"
+                path="M400 103 L460 103"
+              />
+            </circle>
+            <text class="tm" x="20" y="222">
+              Retention: daily bytes × retention days × replication factor. Say
+              which numbers are assumptions.
+            </text>
+          </svg>
+          <figcaption>
+            Partition count comes from throughput and consumer parallelism, then
+            headroom. The example numbers are illustrative; state yours.
+          </figcaption>
+        </figure>
+
+        <h3 class="cap-title">3. Walk through failures</h3>
+        <p>
+          Interviewers often ask "what breaks?" Prepare short answers for these
+          cases:
+        </p>
+        <ul>
+          <li>
+            <strong>Broker failure</strong>: leadership moves to an in-sync
+            follower. With acks=all and a replication factor of 3, acknowledged
+            writes survive.
+          </li>
+          <li>
+            <strong>Consumer crash</strong>: its partitions are reassigned, and
+            processing resumes from the last committed offset. Some records may
+            be reprocessed, so the handler must be idempotent.
+          </li>
+          <li>
+            <strong>Poison message</strong>: a record that always fails stalls
+            its partition. Use retries with backoff, then a dead-letter topic,
+            and alert on it.
+          </li>
+          <li>
+            <strong>Out-of-order events</strong>: ordering holds only within a
+            partition. Use event timestamps or sequence numbers in the handler
+            where cross-key order matters.
+          </li>
+          <li>
+            <strong>Schema change</strong>: producers and consumers evolve at
+            different times. Use a schema registry with compatibility rules, so
+            old and new readers can coexist.
+          </li>
+          <li>
+            <strong>Region failure</strong>: cross-region replication (such as
+            MirrorMaker 2 or a managed equivalent) lets consumers in another
+            region take over, with a lag and a possible gap. State the recovery
+            point you accept.
+          </li>
+        </ul>
+
+        <h3 class="cap-title">4. Answer template</h3>
+        <p>
+          For any "design X with Kafka" question, use this order: the event
+          shape and key, the topic and partition count with the sizing reason,
+          the producer durability setting, the consumer groups and what each
+          does, the delivery guarantee and idempotency plan, the retention and
+          reprocessing story, and the monitoring signals (lag, error rate, DLQ
+          depth).
+        </p>
+
+        <h3 class="cap-title">5. Likely follow-ups</h3>
+        <ul>
+          <li>
+            "How would you reprocess last month's events?" Use retention or an
+            archive in object storage, then replay into a new consumer group so
+            the live group is not disturbed.
+          </li>
+          <li>
+            "What if one customer produces 80% of the traffic?" Discuss a
+            hot-key remedy: a sub-key or salt for that customer, or a dedicated
+            topic.
+          </li>
+          <li>
+            "How do you keep ordering for a user's actions while scaling?" Key
+            by user ID so each user's events share a partition, and accept that
+            global order is not kept.
+          </li>
+          <li>
+            "Why not store everything in the database and skip Kafka?" The
+            answer is decoupling, fan-out to several consumers, and replay. Name
+            the cost: an extra system to run and operate.
+          </li>
+        </ul>
+      </section>
+
+      <!-- ============ REFERENCE ============ -->
+      <h2 class="group">Reference</h2>
+
+      <section class="topic" id="reference">
+        <h2>Quick reference</h2>
+        <ul>
+          <li><strong>Topic</strong>: named stream, split into partitions.</li>
+          <li>
+            <strong>Partition</strong>: ordered, append-only log. The unit of
+            parallelism and of ordering.
+          </li>
+          <li>
+            <strong>Offset</strong>: position of a record within one partition.
+          </li>
+          <li>
+            <strong>Broker</strong>: a Kafka server that stores partition
+            replicas.
+          </li>
+          <li>
+            <strong>Leader / follower / ISR</strong>: the replica that serves
+            reads and writes, the copies, and the caught-up copies eligible for
+            leadership.
+          </li>
+          <li>
+            <strong>Consumer group</strong>: consumers that share a topic; one
+            consumer per partition at a time.
+          </li>
+          <li>
+            <strong>acks</strong>: 0, 1 or all. Trade speed against durability.
+          </li>
+          <li>
+            <strong>Idempotent producer</strong>
+            (<code>enable.idempotence=true</code>): retries do not create
+            duplicate records in a partition.
+          </li>
+          <li>
+            <strong>Retention / compaction</strong>: time or size limits, or
+            keep only the latest value per key.
+          </li>
+          <li>
+            <strong>KRaft</strong>: built-in metadata quorum that replaces
+            ZooKeeper.
+          </li>
+        </ul>
+      </section>
+    </main>
+  </body>
+</html>
